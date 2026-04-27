@@ -1,0 +1,27 @@
+{
+  "temperature": {
+    "component": "AHT20",
+    "function": "Temperature sensing",
+    "interface": "I2C"
+  },
+  "humidity": {
+    "component": "AHT20",
+    "function": "Humidity sensing",
+    "interface": "I2C"
+  },
+  "light": {
+    "component": "BH1750",
+    "function": "Ambient light sensing",
+    "interface": "I2C"
+  },
+  "air_quality": {
+    "component": "SGP30",
+    "function": "VOC / air quality sensing",
+    "interface": "I2C"
+  },
+  "pressure": {
+    "component": "BMP280",
+    "function": "Pressure sensing",
+    "interface": "I2C"
+  }
+}
