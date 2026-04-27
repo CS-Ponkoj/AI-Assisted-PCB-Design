@@ -1,4 +1,4 @@
-"""Export helpers for PCB designer handoff packages."""
+"""Export helpers for PCB designer packages."""
 
 import csv
 import io

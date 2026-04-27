@@ -1,4 +1,4 @@
-"""Data loading and validation for sensor-driven PCB handoff generation."""
+"""Data loading and validation for sensor-driven PCB generation."""
 
 import json
 from pathlib import Path

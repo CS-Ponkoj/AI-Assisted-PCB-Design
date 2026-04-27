@@ -1,4 +1,4 @@
-"""AI-assisted PCB design handoff generator.
+"""AI-assisted PCB design generator.
 
 This Streamlit app turns a controlled natural-language sensor-board request
 into a PCB-designer-ready handoff for a small 2-layer ESP32 prototype. The
@@ -743,7 +743,7 @@ def render_export_buttons(package: Dict[str, Any]) -> None:
 
 def main() -> None:
     """Streamlit entry point."""
-    st.set_page_config(page_title="PCB Designer Handoff Generator", layout="wide")
+    st.set_page_config(page_title="PCB Designer Generator", layout="wide")
     st.title("PCB Designer Handoff Generator")
     st.markdown(
         "Generate a build-oriented 2-layer ESP32 sensor-board handoff from a controlled natural-language requirement."
