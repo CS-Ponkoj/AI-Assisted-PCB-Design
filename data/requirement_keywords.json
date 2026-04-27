@@ -1,0 +1,20 @@
+{
+  "connectivity_keywords": {
+    "WiFi": ["wifi", "wi-fi"],
+    "Bluetooth": ["bluetooth", "ble"]
+  },
+  "default_connectivity": ["WiFi", "Bluetooth"],
+  "unsupported_keywords": [
+    "gps",
+    "camera",
+    "microphone",
+    "sound",
+    "audio",
+    "video",
+    "accelerometer",
+    "gyroscope",
+    "cellular",
+    "lora",
+    "battery"
+  ]
+}

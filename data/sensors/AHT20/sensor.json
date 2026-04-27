@@ -1,0 +1,41 @@
+{
+  "component": "AHT20",
+  "display_name": "AHT20",
+  "order": 10,
+  "interface": "I2C",
+  "functions": "Temperature and humidity",
+  "categories": [
+    {
+      "name": "temperature",
+      "function": "Temperature sensing",
+      "keywords": ["temperature", "temp"]
+    },
+    {
+      "name": "humidity",
+      "function": "Humidity sensing",
+      "keywords": ["humidity", "humid"]
+    }
+  ],
+  "linked_categories": ["temperature", "humidity"],
+  "i2c_address": "0x38",
+  "supply": "3.3 V",
+  "current_ma": 1.0,
+  "footprint": "AHT20 LGA sensor package or verified breakout-compatible SMD footprint",
+  "pins": {
+    "VDD": "3V3",
+    "GND": "GND",
+    "SDA": "I2C_SDA",
+    "SCL": "I2C_SCL"
+  },
+  "placement": "Place at board edge with vent opening; keep away from regulator, ESP32, USB connector heat, and status LED.",
+  "routing": "Short I2C stubs; no copper pour directly under sensing opening if using exposed environmental port.",
+  "visual": {
+    "ref": "U3",
+    "x": 620,
+    "y": 72,
+    "w": 138,
+    "h": 72,
+    "purpose": "Temp + Humidity",
+    "placement": "vent edge"
+  }
+}

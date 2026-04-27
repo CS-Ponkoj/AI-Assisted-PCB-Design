@@ -1,0 +1,66 @@
+{
+  "AHT20": {
+    "functions": "Temperature and humidity",
+    "i2c_address": "0x38",
+    "supply": "3.3 V",
+    "current_ma": 1.0,
+    "footprint": "AHT20 LGA sensor package or verified breakout-compatible SMD footprint",
+    "pins": {
+      "VDD": "3V3",
+      "GND": "GND",
+      "SDA": "I2C_SDA",
+      "SCL": "I2C_SCL"
+    },
+    "placement": "Place at board edge with vent opening; keep away from regulator, ESP32, USB connector heat, and status LED.",
+    "routing": "Short I2C stubs; no copper pour directly under sensing opening if using exposed environmental port."
+  },
+  "BH1750": {
+    "functions": "Ambient light",
+    "i2c_address": "0x23",
+    "supply": "3.3 V",
+    "current_ma": 0.2,
+    "footprint": "BH1750FVI WSOF-6 or selected module-compatible SMD footprint",
+    "pins": {
+      "VCC": "3V3",
+      "GND": "GND",
+      "SDA": "I2C_SDA",
+      "SCL": "I2C_SCL",
+      "ADDR": "GND"
+    },
+    "placement": "Place near a board/window edge with a clear optical path; do not shadow with tall parts or enclosure ribs.",
+    "routing": "Keep light sensor area free from tall silkscreen labels, LEDs, and dark solder-mask obstructions."
+  },
+  "SGP30": {
+    "functions": "VOC air quality",
+    "i2c_address": "0x58",
+    "supply": "3.3 V",
+    "current_ma": 48.0,
+    "footprint": "SGP30 DFN-6 or verified gas-sensor module footprint",
+    "pins": {
+      "VDD": "3V3",
+      "GND": "GND",
+      "SDA": "I2C_SDA",
+      "SCL": "I2C_SCL"
+    },
+    "placement": "Place at board edge with airflow slots; keep away from adhesives, conformal coating, and hot regulator area.",
+    "routing": "Avoid planes or components blocking the sensing port; leave assembly note that sensor must not be washed/coated."
+  },
+  "BMP280": {
+    "functions": "Barometric pressure",
+    "i2c_address": "0x76",
+    "supply": "3.3 V",
+    "current_ma": 0.7,
+    "footprint": "BMP280 LGA-8 or verified pressure-sensor module footprint",
+    "pins": {
+      "VDD": "3V3",
+      "VDDIO": "3V3",
+      "GND": "GND",
+      "SDA": "I2C_SDA",
+      "SCL": "I2C_SCL",
+      "SDO": "GND",
+      "CSB": "3V3"
+    },
+    "placement": "Place where pressure port is exposed to ambient air; avoid enclosure compression and direct airflow jets.",
+    "routing": "Keep sensor top port unobstructed; no glue, flux residue, or silkscreen over the vent area."
+  }
+}

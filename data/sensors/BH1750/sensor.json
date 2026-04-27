@@ -1,0 +1,37 @@
+{
+  "component": "BH1750",
+  "display_name": "BH1750",
+  "order": 20,
+  "interface": "I2C",
+  "functions": "Ambient light",
+  "categories": [
+    {
+      "name": "light",
+      "function": "Ambient light sensing",
+      "keywords": ["light", "lux"]
+    }
+  ],
+  "linked_categories": [],
+  "i2c_address": "0x23",
+  "supply": "3.3 V",
+  "current_ma": 0.2,
+  "footprint": "BH1750FVI WSOF-6 or selected module-compatible SMD footprint",
+  "pins": {
+    "VCC": "3V3",
+    "GND": "GND",
+    "SDA": "I2C_SDA",
+    "SCL": "I2C_SCL",
+    "ADDR": "GND"
+  },
+  "placement": "Place near a board/window edge with a clear optical path; do not shadow with tall parts or enclosure ribs.",
+  "routing": "Keep light sensor area free from tall silkscreen labels, LEDs, and dark solder-mask obstructions.",
+  "visual": {
+    "ref": "U4",
+    "x": 620,
+    "y": 168,
+    "w": 138,
+    "h": 72,
+    "purpose": "Light",
+    "placement": "clear window"
+  }
+}

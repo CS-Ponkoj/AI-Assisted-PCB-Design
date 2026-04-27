@@ -1,0 +1,39 @@
+{
+  "component": "BMP280",
+  "display_name": "BMP280",
+  "order": 40,
+  "interface": "I2C",
+  "functions": "Barometric pressure",
+  "categories": [
+    {
+      "name": "pressure",
+      "function": "Pressure sensing",
+      "keywords": ["pressure", "barometric", "altitude"]
+    }
+  ],
+  "linked_categories": [],
+  "i2c_address": "0x76",
+  "supply": "3.3 V",
+  "current_ma": 0.7,
+  "footprint": "BMP280 LGA-8 or verified pressure-sensor module footprint",
+  "pins": {
+    "VDD": "3V3",
+    "VDDIO": "3V3",
+    "GND": "GND",
+    "SDA": "I2C_SDA",
+    "SCL": "I2C_SCL",
+    "SDO": "GND",
+    "CSB": "3V3"
+  },
+  "placement": "Place where pressure port is exposed to ambient air; avoid enclosure compression and direct airflow jets.",
+  "routing": "Keep sensor top port unobstructed; no glue, flux residue, or silkscreen over the vent area.",
+  "visual": {
+    "ref": "U6",
+    "x": 620,
+    "y": 384,
+    "w": 138,
+    "h": 72,
+    "purpose": "Pressure",
+    "placement": "pressure port"
+  }
+}

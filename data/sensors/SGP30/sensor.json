@@ -1,0 +1,36 @@
+{
+  "component": "SGP30",
+  "display_name": "SGP30",
+  "order": 30,
+  "interface": "I2C",
+  "functions": "VOC air quality",
+  "categories": [
+    {
+      "name": "air_quality",
+      "function": "VOC / air quality sensing",
+      "keywords": ["air quality", "air-quality", "voc", "gas"]
+    }
+  ],
+  "linked_categories": [],
+  "i2c_address": "0x58",
+  "supply": "3.3 V",
+  "current_ma": 48.0,
+  "footprint": "SGP30 DFN-6 or verified gas-sensor module footprint",
+  "pins": {
+    "VDD": "3V3",
+    "GND": "GND",
+    "SDA": "I2C_SDA",
+    "SCL": "I2C_SCL"
+  },
+  "placement": "Place at board edge with airflow slots; keep away from adhesives, conformal coating, and hot regulator area.",
+  "routing": "Avoid planes or components blocking the sensing port; leave assembly note that sensor must not be washed/coated.",
+  "visual": {
+    "ref": "U5",
+    "x": 620,
+    "y": 284,
+    "w": 138,
+    "h": 72,
+    "purpose": "Air quality / VOC",
+    "placement": "air slots"
+  }
+}

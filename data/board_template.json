@@ -1,0 +1,172 @@
+{
+  "project_summary_static": [
+    {"Item": "Board type", "Decision": "2-layer FR-4 ESP32 sensor prototype"},
+    {"Item": "Power input", "Decision": "USB-C connector used for 5 V power only; no USB data routing"},
+    {"Item": "Regulated rail", "Decision": "Single 3.3 V rail for ESP32 and all sensors"},
+    {"Item": "Controller", "Decision": "ESP32-WROOM-32 module with WiFi/Bluetooth enabled"}
+  ],
+  "assumptions_base": [
+    {"Assumption": "PCB stackup", "Value": "2-layer FR-4, 1.6 mm thickness, 1 oz copper, solder mask both sides"},
+    {"Assumption": "Assembly", "Value": "Small-batch SMT assembly with hand-accessible test points"},
+    {"Assumption": "USB-C role", "Value": "Sink-only power input; CC1/CC2 each use 5.1 kOhm pull-down to GND"},
+    {"Assumption": "Regulator", "Value": "Use a 3.3 V LDO rated at 600 mA or higher with manufacturer-recommended capacitors"},
+    {"Assumption": "I2C bus", "Value": "ESP32 GPIO21=SDA and GPIO22=SCL, 4.7 kOhm pullups to 3.3 V"}
+  ],
+  "io_table_base": [
+    {
+      "Interface": "USB-C power input",
+      "Direction": "Input",
+      "Pins/Nets": "J1 VBUS to VBUS_5V, J1 GND to GND, CC1/CC2 to GND through 5.1 kOhm",
+      "Electrical": "5 V nominal from USB source",
+      "Designer note": "Do not route D+/D- unless a future USB data feature is added."
+    },
+    {
+      "Interface": "3.3 V system rail",
+      "Direction": "Internal output",
+      "Pins/Nets": "U1 VOUT to 3V3",
+      "Electrical": "3.3 V regulated, target >=600 mA LDO",
+      "Designer note": "Feed ESP32, I2C pullups, sensors, status LED, and test point TP2."
+    },
+    {
+      "Interface": "Wireless",
+      "Direction": "RF I/O",
+      "Pins/Nets": "ESP32 module antenna",
+      "Electrical": "{wireless}",
+      "Designer note": "Keep copper, components, enclosure metal, and mounting hardware out of antenna keepout."
+    },
+    {
+      "Interface": "I2C sensor bus",
+      "Direction": "Bidirectional",
+      "Pins/Nets": "GPIO21/I2C_SDA, GPIO22/I2C_SCL",
+      "Electrical": "3.3 V logic with 4.7 kOhm pullups",
+      "Designer note": "Route as short, quiet traces away from regulator switching/noisy edges."
+    },
+    {
+      "Interface": "Status LED",
+      "Direction": "Output",
+      "Pins/Nets": "ESP32 GPIO2 to D1 through R5",
+      "Electrical": "Approx. 2-5 mA indicator current",
+      "Designer note": "Use for firmware heartbeat or fault indication."
+    },
+    {
+      "Interface": "Reset button",
+      "Direction": "Input",
+      "Pins/Nets": "ESP32 EN pulled up by R6, SW1 pulls EN to GND",
+      "Electrical": "Active-low reset",
+      "Designer note": "Place near board edge or accessible enclosure opening."
+    }
+  ],
+  "bom_base": [
+    {"Ref": "J1", "Item": "USB-C receptacle", "Value / Part": "USB-C power sink connector", "Qty": "1", "Footprint / Package": "USB-C 16-pin SMD, power-only pins used", "Role": "Power input", "Notes": "Expose at board edge; connect shell to chassis/GND through chosen EMC strategy."},
+    {"Ref": "U1", "Item": "3.3 V LDO regulator", "Value / Part": "AP2112K-3.3 or equivalent >=600 mA LDO", "Qty": "1", "Footprint / Package": "SOT-23-5 or selected regulator footprint", "Role": "Power regulation", "Notes": "Verify pinout against selected manufacturer before PCB release."},
+    {"Ref": "U2", "Item": "ESP32-WROOM-32", "Value / Part": "ESP32-WROOM-32 module", "Qty": "1", "Footprint / Package": "Espressif module land pattern", "Role": "MCU and wireless", "Notes": "Respect antenna keepout exactly from module datasheet."},
+    {"Ref": "R1, R2", "Item": "USB-C CC pull-downs", "Value / Part": "5.1 kOhm, 1%, 0603", "Qty": "2", "Footprint / Package": "0603", "Role": "USB-C sink detection", "Notes": "One resistor from CC1 to GND and one from CC2 to GND."},
+    {"Ref": "R3, R4", "Item": "I2C pullups", "Value / Part": "4.7 kOhm, 1%, 0603", "Qty": "2", "Footprint / Package": "0603", "Role": "I2C bus bias", "Notes": "Pull SDA and SCL to 3V3 near the ESP32 or bus center."},
+    {"Ref": "R5", "Item": "LED current limit", "Value / Part": "330 Ohm, 0603", "Qty": "1", "Footprint / Package": "0603", "Role": "Status LED", "Notes": "Adjust value for selected LED brightness target."},
+    {"Ref": "R6", "Item": "EN pull-up", "Value / Part": "10 kOhm, 0603", "Qty": "1", "Footprint / Package": "0603", "Role": "ESP32 reset", "Notes": "Pull ESP32 EN to 3V3."},
+    {"Ref": "D1", "Item": "Status LED", "Value / Part": "Green LED, 0603", "Qty": "1", "Footprint / Package": "0603 LED", "Role": "Visual status", "Notes": "Place visible from enclosure or board top."},
+    {"Ref": "SW1", "Item": "Reset pushbutton", "Value / Part": "Momentary tactile switch", "Qty": "1", "Footprint / Package": "SMD tactile switch", "Role": "Manual reset", "Notes": "Connect between EN and GND."},
+    {"Ref": "C1", "Item": "Regulator input capacitor", "Value / Part": "10 uF, 10 V, X5R/X7R", "Qty": "1", "Footprint / Package": "0805 or regulator-recommended", "Role": "VBUS decoupling", "Notes": "Place close to U1 VIN and GND."},
+    {"Ref": "C2", "Item": "Regulator output capacitor", "Value / Part": "10 uF, 6.3 V, X5R/X7R", "Qty": "1", "Footprint / Package": "0805 or regulator-recommended", "Role": "3V3 decoupling", "Notes": "Place close to U1 VOUT and GND."},
+    {"Ref": "C3", "Item": "Regulator bypass capacitor", "Value / Part": "0.1 uF, 16 V, X7R", "Qty": "1", "Footprint / Package": "0603", "Role": "High-frequency decoupling", "Notes": "Place close to U1."},
+    {"Ref": "C4, C5", "Item": "ESP32 rail capacitors", "Value / Part": "10 uF and 0.1 uF ceramic", "Qty": "2", "Footprint / Package": "0805/0603", "Role": "MCU decoupling", "Notes": "Place near ESP32 3V3 pins."},
+    {"Ref": "TP1", "Item": "5 V test point", "Value / Part": "SMD test pad", "Qty": "1", "Footprint / Package": "1.0-1.5 mm test pad", "Role": "Bring-up measurement", "Notes": "Label VBUS_5V on silkscreen."},
+    {"Ref": "TP2", "Item": "3.3 V test point", "Value / Part": "SMD test pad", "Qty": "1", "Footprint / Package": "1.0-1.5 mm test pad", "Role": "Bring-up measurement", "Notes": "Label 3V3 on silkscreen."},
+    {"Ref": "TP3", "Item": "GND test point", "Value / Part": "SMD test pad", "Qty": "1", "Footprint / Package": "1.0-1.5 mm test pad", "Role": "Bring-up measurement", "Notes": "Label GND on silkscreen."},
+    {"Ref": "TP4, TP5", "Item": "I2C test points", "Value / Part": "SMD test pads for SDA/SCL", "Qty": "2", "Footprint / Package": "1.0 mm test pad", "Role": "Firmware/debug probing", "Notes": "Place near ESP32 or sensor bus header area."},
+    {"Ref": "H1-H4", "Item": "Mounting holes", "Value / Part": "M2.5 or M3 plated/non-plated holes", "Qty": "4", "Footprint / Package": "Mechanical holes", "Role": "Mechanical mounting", "Notes": "Keep clear of antenna zone and USB connector shell."}
+  ],
+  "pin_map_base": [
+    {"Ref": "J1", "Pin": "VBUS A4/A9/B4/B9", "Net": "VBUS_5V", "Connection / Function": "USB-C 5 V input to regulator VIN", "Type": "Power"},
+    {"Ref": "J1", "Pin": "GND A1/A12/B1/B12", "Net": "GND", "Connection / Function": "USB-C ground and shield reference", "Type": "Ground"},
+    {"Ref": "J1", "Pin": "CC1", "Net": "USB_CC1", "Connection / Function": "Connect to R1 then GND", "Type": "Configuration"},
+    {"Ref": "J1", "Pin": "CC2", "Net": "USB_CC2", "Connection / Function": "Connect to R2 then GND", "Type": "Configuration"},
+    {"Ref": "U1", "Pin": "VIN", "Net": "VBUS_5V", "Connection / Function": "Input from USB-C VBUS with C1 nearby", "Type": "Power"},
+    {"Ref": "U1", "Pin": "VOUT", "Net": "3V3", "Connection / Function": "Regulated rail with C2/C3 nearby", "Type": "Power"},
+    {"Ref": "U1", "Pin": "GND", "Net": "GND", "Connection / Function": "Solid ground return", "Type": "Ground"},
+    {"Ref": "U1", "Pin": "EN", "Net": "VBUS_5V", "Connection / Function": "Tie high for always-on regulator unless selected LDO differs", "Type": "Enable"},
+    {"Ref": "U2 ESP32", "Pin": "3V3", "Net": "3V3", "Connection / Function": "Main module supply; place C4/C5 nearby", "Type": "Power"},
+    {"Ref": "U2 ESP32", "Pin": "GND pins", "Net": "GND", "Connection / Function": "Connect to continuous ground pour with multiple vias", "Type": "Ground"},
+    {"Ref": "U2 ESP32", "Pin": "GPIO21", "Net": "I2C_SDA", "Connection / Function": "Shared I2C data line to sensors and R3 pullup", "Type": "Digital I/O"},
+    {"Ref": "U2 ESP32", "Pin": "GPIO22", "Net": "I2C_SCL", "Connection / Function": "Shared I2C clock line to sensors and R4 pullup", "Type": "Digital I/O"},
+    {"Ref": "U2 ESP32", "Pin": "GPIO2", "Net": "STATUS_LED", "Connection / Function": "Drive D1 through R5; avoid forcing boot-invalid state", "Type": "Digital output"},
+    {"Ref": "U2 ESP32", "Pin": "EN", "Net": "ESP32_EN", "Connection / Function": "Pulled to 3V3 by R6; SW1 pulls to GND for reset", "Type": "Reset"},
+    {"Ref": "R1", "Pin": "1 / 2", "Net": "USB_CC1 / GND", "Connection / Function": "5.1 kOhm USB-C sink pull-down", "Type": "Resistor"},
+    {"Ref": "R2", "Pin": "1 / 2", "Net": "USB_CC2 / GND", "Connection / Function": "5.1 kOhm USB-C sink pull-down", "Type": "Resistor"},
+    {"Ref": "R3", "Pin": "1 / 2", "Net": "I2C_SDA / 3V3", "Connection / Function": "4.7 kOhm pullup", "Type": "Resistor"},
+    {"Ref": "R4", "Pin": "1 / 2", "Net": "I2C_SCL / 3V3", "Connection / Function": "4.7 kOhm pullup", "Type": "Resistor"},
+    {"Ref": "D1/R5", "Pin": "Anode/Cathode path", "Net": "3V3 / STATUS_LED", "Connection / Function": "LED current path controlled by ESP32 GPIO2", "Type": "Indicator"},
+    {"Ref": "SW1", "Pin": "1 / 2", "Net": "ESP32_EN / GND", "Connection / Function": "Momentary reset button", "Type": "Switch"},
+    {"Ref": "TP1-TP5", "Pin": "Pads", "Net": "VBUS_5V, 3V3, GND, I2C_SDA, I2C_SCL", "Connection / Function": "Bring-up and firmware debug access", "Type": "Test"}
+  ],
+  "netlist_base": [
+    {"Net": "VBUS_5V", "Connected pins": "J1 VBUS pins; U1 VIN; U1 EN; C1; TP1", "Type": "Power", "Voltage": "5 V", "Routing / PCB note": "Route as wider power trace from USB-C to regulator; keep short."},
+    {"Net": "3V3", "Connected pins": "U1 VOUT; U2 3V3; R3; R4; R6; C2-C5; TP2; sensor VDD/VCC pins", "Type": "Power", "Voltage": "3.3 V", "Routing / PCB note": "Use a short rail or pour; decouple each IC locally."},
+    {"Net": "GND", "Connected pins": "J1 GND; U1 GND; U2 GND; capacitors; R1; R2; SW1; TP3; all sensor GND pins", "Type": "Ground", "Voltage": "0 V", "Routing / PCB note": "Use bottom-layer ground pour with stitching vias and uninterrupted sensor returns."},
+    {"Net": "USB_CC1", "Connected pins": "J1 CC1; R1", "Type": "USB-C configuration", "Voltage": "0-5 V", "Routing / PCB note": "Short trace; R1 returns to GND."},
+    {"Net": "USB_CC2", "Connected pins": "J1 CC2; R2", "Type": "USB-C configuration", "Voltage": "0-5 V", "Routing / PCB note": "Short trace; R2 returns to GND."},
+    {"Net": "I2C_SDA", "Connected pins": "U2 GPIO21; R3; TP4; sensor SDA pins", "Type": "Digital bus", "Voltage": "3.3 V", "Routing / PCB note": "Route as shared bus with short stubs; avoid antenna area."},
+    {"Net": "I2C_SCL", "Connected pins": "U2 GPIO22; R4; TP5; sensor SCL pins", "Type": "Digital bus", "Voltage": "3.3 V", "Routing / PCB note": "Route alongside SDA where practical; keep away from noisy power loop."},
+    {"Net": "STATUS_LED", "Connected pins": "U2 GPIO2; R5; D1", "Type": "Digital output", "Voltage": "3.3 V", "Routing / PCB note": "Confirm GPIO2 boot behavior with firmware and LED polarity."},
+    {"Net": "ESP32_EN", "Connected pins": "U2 EN; R6; SW1", "Type": "Reset", "Voltage": "3.3 V", "Routing / PCB note": "Keep trace short and away from noisy nets; optional 0.1 uF EN capacitor may be added if reset is unstable."}
+  ],
+  "power_budget_base": {
+    "base_load_ma": 306.4,
+    "regulator_min_ma": 600.0,
+    "rows": [
+      {"Block": "ESP32-WROOM-32", "Estimated current": "300 mA peak", "Rail": "3V3", "Notes": "Budget for WiFi/Bluetooth transmit peaks, not just idle current."},
+      {"Block": "Status LED", "Estimated current": "5 mA", "Rail": "3V3", "Notes": "Depends on R5 and selected LED brightness."},
+      {"Block": "I2C pullups", "Estimated current": "1.4 mA worst case", "Rail": "3V3", "Notes": "Approx. two 4.7 kOhm pullups when both lines are low."}
+    ]
+  },
+  "layout_guidance_base": [
+    {"Area": "Board outline", "Instruction": "Target a compact rectangle around 45 mm x 35 mm unless enclosure forces another shape; place mounting holes near corners."},
+    {"Area": "USB-C edge", "Instruction": "Place J1 centered on one board edge with connector overhang and shell pads per footprint drawing."},
+    {"Area": "Power zone", "Instruction": "Place U1, C1, C2, and C3 within 10 mm of J1; keep VBUS_5V trace short and wider than signal traces."},
+    {"Area": "ESP32 module", "Instruction": "Place U2 with its antenna at the opposite board edge or hanging over a board edge; keep the full antenna keepout free of copper on all layers."},
+    {"Area": "Grounding", "Instruction": "Use bottom layer as continuous GND pour; stitch top/bottom GND near USB shell, regulator, ESP32, and sensors."},
+    {"Area": "I2C bus", "Instruction": "Route SDA/SCL from ESP32 to sensors as short 3.3 V digital traces with R3/R4 near ESP32 or bus midpoint; add TP4/TP5 before branches."},
+    {"Area": "Decoupling", "Instruction": "Every IC gets local 0.1 uF decoupling from supply to GND with the shortest possible return path."},
+    {"Area": "User access", "Instruction": "Place D1 and SW1 on the top side where visible/pressable after assembly or through enclosure openings."},
+    {"Area": "Test access", "Instruction": "Place TP1 VBUS_5V, TP2 3V3, TP3 GND, TP4 SDA, and TP5 SCL along one accessible board edge."}
+  ],
+  "fabrication_checklist": [
+    {"Check": "DRC", "Acceptance": "No clearance, unconnected net, solder-mask, or silkscreen-on-pad errors."},
+    {"Check": "Antenna keepout", "Acceptance": "ESP32 antenna area has no copper, traces, vias, components, or mounting hardware on any layer."},
+    {"Check": "USB-C footprint", "Acceptance": "Connector orientation, shell pads, VBUS/GND pins, and CC pins match the purchased part."},
+    {"Check": "Regulator footprint", "Acceptance": "U1 pinout matches selected LDO; capacitors meet datasheet ESR/capacitance requirements."},
+    {"Check": "Sensor exposure", "Acceptance": "Environmental sensors are not blocked by enclosure, solder mask openings, adhesive, coating, or tall parts."},
+    {"Check": "Silkscreen", "Acceptance": "Reference designators, polarity, USB orientation, and test point labels are readable."},
+    {"Check": "Assembly notes", "Acceptance": "Mark SGP30/environmental sensors as no-wash/no-conformal-coat if populated."}
+  ],
+  "bringup_checklist_base": [
+    {"Step": "Pre-power inspection", "Expected result": "No solder bridges on USB-C, ESP32 module pads, regulator, or sensor pins."},
+    {"Step": "Resistance check", "Expected result": "No short between VBUS_5V and GND or 3V3 and GND before connecting USB power."},
+    {"Step": "Apply USB power", "Expected result": "TP1 measures about 5 V and TP2 measures 3.3 V."},
+    {"Step": "Reset check", "Expected result": "Pressing SW1 pulls ESP32_EN low and releases back to 3.3 V."},
+    {"Step": "Firmware flash", "Expected result": "ESP32 boots and toggles D1 status LED."},
+    {"Step": "I2C scan", "Expected result": "Firmware detects every populated sensor address."}
+  ],
+  "schematic_summary_base": [
+    "J1 receives USB-C 5 V power. VBUS feeds U1 VIN and GND ties to the board ground system.",
+    "R1 and R2 are 5.1 kOhm pull-down resistors from CC1 and CC2 to GND so a USB-C source enables 5 V.",
+    "U1 regulates VBUS_5V to 3V3. C1 is the input bulk capacitor; C2/C3 are output and high-frequency bypass capacitors.",
+    "U2 ESP32-WROOM-32 is powered from 3V3. GPIO21 is I2C_SDA and GPIO22 is I2C_SCL.",
+    "R3 and R4 pull I2C_SDA and I2C_SCL to 3V3. TP4 and TP5 expose the bus for debug.",
+    "D1/R5 provide a status LED from GPIO2, and SW1 pulls ESP32_EN low for reset while R6 pulls EN high."
+  ],
+  "pcb_visual": {
+    "sensor_refs": {
+      "AHT20": "U3",
+      "BH1750": "U4",
+      "SGP30": "U5",
+      "BMP280": "U6"
+    },
+    "sensor_positions": {
+      "AHT20": {"x": 620, "y": 72, "w": 138, "h": 72, "purpose": "Temp + Humidity", "placement": "vent edge"},
+      "BH1750": {"x": 620, "y": 168, "w": 138, "h": 72, "purpose": "Light", "placement": "clear window"},
+      "SGP30": {"x": 620, "y": 284, "w": 138, "h": 72, "purpose": "Air quality / VOC", "placement": "air slots"},
+      "BMP280": {"x": 620, "y": 384, "w": 138, "h": 72, "purpose": "Pressure", "placement": "pressure port"}
+    }
+  }
+}

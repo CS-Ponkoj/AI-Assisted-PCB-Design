@@ -1,0 +1,40 @@
+{
+  "enabled": false,
+  "component": "NEW_SENSOR_PART",
+  "display_name": "New Sensor Display Name",
+  "order": 90,
+  "interface": "I2C",
+  "functions": "Short human-readable sensing function",
+  "categories": [
+    {
+      "name": "new_requirement_name",
+      "function": "What this requirement means",
+      "keywords": ["new requirement", "keyword users may type"]
+    }
+  ],
+  "linked_categories": [],
+  "i2c_address": "0x00",
+  "supply": "3.3 V",
+  "current_ma": 1.0,
+  "footprint": "Package or footprint guidance",
+  "pins": {
+    "VCC": "3V3",
+    "GND": "GND",
+    "SDA": "I2C_SDA",
+    "SCL": "I2C_SCL",
+    "INT": "GPIO_INT_OPTIONAL",
+    "EN": "3V3",
+    "ADDR": "GND"
+  },
+  "placement": "Where to place this sensor on the PCB.",
+  "routing": "How to route signals for this sensor.",
+  "visual": {
+    "ref": "U7",
+    "x": 620,
+    "y": 480,
+    "w": 138,
+    "h": 72,
+    "purpose": "Short label",
+    "placement": "short visual note"
+  }
+}
