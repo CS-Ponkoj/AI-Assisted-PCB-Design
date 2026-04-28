@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+
+.streamlit/
+.pytest_cache/
+.mypy_cache/
+
+files/*.csv
+files/*.json
+files/*.md

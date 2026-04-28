@@ -1,5 +1,7 @@
 # AI-Assisted PCB Design Generator
 
+Live Link: https://ai-assisted-pcb-design.streamlit.app/
+
 Showcase prototype for a controlled AI-assisted PCB design workflow. A user
 describes a small sensor board in natural language, and the app converts that
 request into a structured PCB design handoff.
@@ -26,7 +28,7 @@ Only the selected I2C sensor footprints change.
 Install Python 3.8 or later:
 
 ```bash
-pip install streamlit graphviz
+pip install -r requirements.txt
 ```
 
 The Graphviz Python package is used for schematic/architecture diagrams. Some
@@ -50,9 +52,18 @@ Make me a USB-C powered indoor monitoring board with WiFi, Bluetooth, temperatur
 
 ```text
 AI_PCB_Design/
+  .gitignore
   app.py
-  pcb_data.py
-  pcb_exports.py
+  requirements.txt
+  README.md
+  src/
+    __init__.py
+    data_loader.py
+    design_generator.py
+    exports.py
+    parser.py
+    validation.py
+    visuals.py
   data/
     board_template.json
     requirement_keywords.json
@@ -70,13 +81,19 @@ AI_PCB_Design/
     extraction_prompt.txt
   tests/
     test_app.py
+  files/
+    generated demo/export artifacts
 ```
 
 ## Code Organization
 
-* `app.py` contains the Streamlit UI, controlled requirement parser, design table generation, and visuals.
-* `pcb_data.py` contains JSON loading, sensor plugin validation, and sensor-library indexing helpers.
-* `pcb_exports.py` contains CSV, Markdown, and JSON handoff export generation.
+* `app.py` contains the Streamlit UI and keeps the generated PCB visual first.
+* `src/data_loader.py` contains JSON loading and sensor-library indexing helpers.
+* `src/validation.py` contains sensor plugin schema checks.
+* `src/parser.py` contains controlled requirement extraction from user input.
+* `src/design_generator.py` contains BOM, pin map, netlist, power budget, checklist, and report data generation.
+* `src/visuals.py` contains the PCB SVG, architecture diagram, and schematic diagram generation.
+* `src/exports.py` contains CSV, Markdown, and JSON handoff export generation.
 
 ## Adding A Sensor
 
