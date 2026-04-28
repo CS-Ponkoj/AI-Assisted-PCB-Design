@@ -2,8 +2,11 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import app
+from src.ai_assistant import validate_ai_extraction
+from src.llm_assistant import run_ollama_requirement_assistant
 
 
 class PcbGeneratorTests(unittest.TestCase):
@@ -172,6 +175,104 @@ class PcbGeneratorTests(unittest.TestCase):
         self.assertIn("# PCB Designer Handoff Report", exports["report_markdown"])
         self.assertIn("## Bill of Materials", exports["report_markdown"])
         self.assertEqual(json.loads(exports["report_json"])["parsed"]["selected_components"], ["AHT20", "BH1750"])
+
+    def test_local_assistant_infers_natural_language_without_api(self):
+        parsed, meta = app.generate_ai_requirements("room comfort brightness and air freshness, no camera")
+
+        self.assertTrue(meta["used_ai"])
+        self.assertEqual(parsed["selected_components"], ["AHT20", "BH1750", "SGP30"])
+        self.assertEqual(
+            parsed["requested_sensing"],
+            ["temperature", "humidity", "light", "air_quality"],
+        )
+        self.assertIn("camera", parsed["unsupported_requirements"])
+        self.assertEqual(parsed["ai_assistant"]["mode"], "local")
+
+    def test_llm_assistant_falls_back_when_ollama_unavailable(self):
+        parsed, meta = run_ollama_requirement_assistant(
+            "room comfort brightness",
+            app.SENSOR_LIBRARY,
+            app.SUPPORTED_SENSORS,
+            app.SENSOR_KEYWORDS,
+            app.REQUIREMENT_GROUPS,
+            app.REQUIREMENT_CONFIG,
+            base_url="http://127.0.0.1:1",
+        )
+
+        self.assertEqual(meta["mode"], "local_fallback")
+        self.assertEqual(parsed["selected_components"], ["AHT20", "BH1750"])
+        self.assertEqual(parsed["ai_assistant"]["mode"], "local_fallback")
+
+    def test_llm_assistant_cannot_drop_base_detections(self):
+        with patch(
+            "src.llm_assistant.call_ollama_generate",
+            return_value={
+                "requested_sensing": ["temperature"],
+                "selected_components": ["AHT20"],
+                "unsupported_requirements": [],
+                "confidence": "high",
+                "notes": ["LLM returned a partial extraction."],
+            },
+        ):
+            parsed, meta = run_ollama_requirement_assistant(
+                "room comfort brightness and air freshness, no camera",
+                app.SENSOR_LIBRARY,
+                app.SUPPORTED_SENSORS,
+                app.SENSOR_KEYWORDS,
+                app.REQUIREMENT_GROUPS,
+                app.REQUIREMENT_CONFIG,
+            )
+
+        self.assertEqual(meta["mode"], "ollama")
+        self.assertEqual(parsed["selected_components"], ["AHT20", "BH1750", "SGP30"])
+        self.assertIn("camera", parsed["unsupported_requirements"])
+        self.assertTrue(any("Preserved Base assistant" in note for note in meta["notes"]))
+
+    def test_local_assistant_validation_keeps_output_inside_supported_hardware(self):
+        rule_based = app.parse_requirements("room comfort brightness and camera")
+        ai_result = {
+            "requested_sensing": ["temperature", "humidity", "light", "soil_moisture"],
+            "selected_components": ["AHT20", "BH1750", "CAM123"],
+            "unsupported_requirements": ["camera"],
+            "confidence": "high",
+            "notes": ["room comfort mapped to temperature and humidity"],
+        }
+
+        parsed, notes = validate_ai_extraction(
+            ai_result,
+            rule_based,
+            app.SENSOR_LIBRARY,
+            app.SUPPORTED_SENSORS,
+            app.REQUIREMENT_CONFIG,
+        )
+
+        self.assertEqual(parsed["selected_components"], ["AHT20", "BH1750"])
+        self.assertNotIn("soil_moisture", parsed["requested_sensing"])
+        self.assertIn("camera", parsed["unsupported_requirements"])
+        self.assertTrue(any("Ignored unsupported" in note for note in notes))
+
+    def test_readiness_review_ready_for_simple_supported_sensor(self):
+        package = app.generate_design_package("temperature humidity")
+        review = app.generate_design_readiness_review(package)
+
+        self.assertEqual(review["status"], "Ready")
+        self.assertEqual(review["blockers"], [])
+
+    def test_readiness_review_needs_review_for_optional_pins(self):
+        package = app.generate_design_package("light sensing")
+        review = app.generate_design_readiness_review(package)
+
+        self.assertEqual(review["status"], "Needs Review")
+        self.assertTrue(any("Optional/configuration pins" in item for item in review["review_items"]))
+
+    def test_readiness_review_blocks_unsupported_or_empty_design(self):
+        unsupported_package = app.generate_design_package("temperature with GPS and camera")
+        unsupported_review = app.generate_design_readiness_review(unsupported_package)
+        empty_package = app.generate_design_package("make a tiny wireless board")
+        empty_review = app.generate_design_readiness_review(empty_package)
+
+        self.assertEqual(unsupported_review["status"], "Blocked")
+        self.assertEqual(empty_review["status"], "Blocked")
 
     def test_non_i2c_sensor_gets_validation_warning(self):
         sensor = {

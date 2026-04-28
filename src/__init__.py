@@ -1,1 +1,1 @@
-"""Core modules for the AI-assisted PCB design generator."""
+"""Core modules for the PCB design generator."""

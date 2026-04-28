@@ -8,3 +8,4 @@ __pycache__/
 files/*.csv
 files/*.json
 files/*.md
+prompts/

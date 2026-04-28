@@ -1,6 +1,6 @@
-"""Streamlit UI for the AI-assisted PCB design generator."""
+"""Streamlit UI for the PCB design generator."""
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote
 
 import streamlit as st
@@ -14,9 +14,9 @@ from src.data_loader import (
     load_json,
     load_sensor_definitions,
 )
+from src.ai_assistant import LOCAL_ASSISTANT_NAME, run_ai_requirement_assistant
 from src.design_generator import (
     assign_sensor_refs as assign_sensor_refs_for_context,
-    bom_row,
     generate_assumptions as generate_assumptions_for_context,
     generate_bom as generate_bom_for_context,
     generate_bringup_checklist as generate_bringup_checklist_for_context,
@@ -29,17 +29,17 @@ from src.design_generator import (
     generate_power_budget as generate_power_budget_for_context,
     generate_project_summary as generate_project_summary_for_context,
     generate_schematic_summary as generate_schematic_summary_for_context,
-    net_row,
-    pin_row,
 )
 from src.exports import generate_export_package, rows_to_csv
+from src.llm_assistant import OLLAMA_MODEL_DEFAULT, OLLAMA_URL_DEFAULT, run_ollama_requirement_assistant
 from src.parser import ordered_requirements as ordered_requirements_for_context
 from src.parser import parse_requirements as parse_requirements_for_context
+from src.readiness import generate_design_readiness_review as generate_design_readiness_review_for_context
+from src.readiness import status_message_level
 from src.validation import analyze_sensor_definition, validate_sensor_definition
 from src.visuals import (
     calculate_pcb_visual_height as calculate_pcb_visual_height_for_context,
     generate_block_diagram as generate_block_diagram_for_context,
-    generate_pcb_layout,
     generate_pcb_visual_svg as generate_pcb_visual_svg_for_context,
     generate_schematic_diagram as generate_schematic_diagram_for_context,
     get_sensor_visual_positions as get_sensor_visual_positions_for_context,
@@ -77,15 +77,52 @@ def assign_sensor_refs(selected_components: List[str]) -> Dict[str, str]:
     return assign_sensor_refs_for_context(selected_components, SENSOR_REFS)
 
 
-def generate_design_package(user_input: str) -> Dict[str, Any]:
+def generate_design_package(user_input: str, parsed: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Generate the complete PCB handoff data structure."""
-    parsed = parse_requirements(user_input)
+    parsed = parsed or parse_requirements(user_input)
     return generate_design_package_for_context(
         user_input,
         parsed,
         SENSOR_LIBRARY,
         BOARD_TEMPLATE,
         SENSOR_REFS,
+    )
+
+
+def generate_ai_requirements(user_input: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Run the local requirement assistant and return validated requirements."""
+    return run_ai_requirement_assistant(
+        user_input,
+        SENSOR_LIBRARY,
+        SUPPORTED_SENSORS,
+        SENSOR_KEYWORDS,
+        REQUIREMENT_GROUPS,
+        REQUIREMENT_CONFIG,
+    )
+
+
+def generate_llm_requirements(user_input: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Run the optional Ollama LLM assistant and return validated requirements."""
+    return run_ollama_requirement_assistant(
+        user_input,
+        SENSOR_LIBRARY,
+        SUPPORTED_SENSORS,
+        SENSOR_KEYWORDS,
+        REQUIREMENT_GROUPS,
+        REQUIREMENT_CONFIG,
+    )
+
+
+def generate_design_readiness_review(
+    package: Dict[str, Any],
+    validation_rows: Optional[List[Dict[str, str]]] = None,
+) -> Dict[str, Any]:
+    """Generate Ready / Needs Review / Blocked status for the current package."""
+    return generate_design_readiness_review_for_context(
+        package,
+        SENSOR_LIBRARY,
+        BOARD_TEMPLATE,
+        validation_rows or collect_sensor_validation(),
     )
 
 
@@ -237,6 +274,65 @@ def render_pcb_legend() -> None:
     )
 
 
+def render_ai_summary(parsed: Dict[str, Any], metadata: Dict[str, Any]) -> None:
+    """Render assistant notes when an assistant mode is requested."""
+    ai_info = parsed.get("ai_assistant")
+    if not ai_info:
+        return
+
+    with st.expander("Requirement Assistant", expanded=bool(metadata.get("used_ai"))):
+        mode = metadata.get("mode", ai_info.get("mode", "local"))
+        if mode == "ollama":
+            st.success(f"LLM assistant used Ollama model {metadata.get('model', OLLAMA_MODEL_DEFAULT)}.")
+        elif mode == "local_fallback":
+            st.warning("LLM assistant was requested, but the app used Base assistant fallback.")
+        elif metadata.get("used_ai"):
+            st.success(f"Base assistant used: {metadata.get('model', LOCAL_ASSISTANT_NAME)}.")
+        else:
+            st.info("Assistant was requested, but the app used the rule-based parser.")
+        st.table(
+            [
+                {"Item": "Assistant enabled", "Value": str(ai_info.get("enabled"))},
+                {"Item": "Mode", "Value": str(ai_info.get("mode", mode))},
+                {"Item": "Model", "Value": str(metadata.get("model", ai_info.get("model", LOCAL_ASSISTANT_NAME)))},
+                {"Item": "Confidence", "Value": str(ai_info.get("confidence"))},
+                {"Item": "Selected sensors", "Value": ", ".join(parsed["selected_components"]) or "None"},
+                {"Item": "Unsupported requests", "Value": ", ".join(parsed["unsupported_requirements"]) or "None"},
+            ]
+        )
+        for note in ai_info.get("notes", []):
+            st.markdown(f"- {note}")
+
+
+def render_readiness_review(review: Dict[str, Any]) -> None:
+    """Render the Ready / Needs Review / Blocked panel."""
+    status = review["status"]
+    level = status_message_level(status)
+    message = f"Design readiness: {status}"
+    if level == "success":
+        st.success(message)
+    elif level == "warning":
+        st.warning(message)
+    elif level == "error":
+        st.error(message)
+    else:
+        st.info(message)
+
+    st.table(review["rows"])
+    if review["blockers"]:
+        st.subheader("Blockers")
+        for item in review["blockers"]:
+            st.markdown(f"- {item}")
+    if review["review_items"]:
+        st.subheader("Needs Review")
+        for item in review["review_items"]:
+            st.markdown(f"- {item}")
+    if review["passed"]:
+        with st.expander("Passed Checks", expanded=False):
+            for item in review["passed"]:
+                st.markdown(f"- {item}")
+
+
 def render_visual_section(package: Dict[str, Any], selected_components: List[str]) -> None:
     """Render the primary PCB visual before the detailed handoff tables."""
     st.header("PCB Layout Visual")
@@ -344,7 +440,7 @@ def render_scope_panel() -> None:
     )
 
 
-def render_sensor_validation_panel() -> None:
+def render_sensor_validation_panel() -> List[Dict[str, str]]:
     with st.expander("Sensor Plugin Validation", expanded=False):
         validation_rows = collect_sensor_validation()
         validation_statuses = {row["Status"] for row in validation_rows}
@@ -356,6 +452,80 @@ def render_sensor_validation_panel() -> None:
         else:
             st.success("All enabled sensor plugin files passed validation.")
         st.table(validation_rows)
+    return validation_rows
+
+
+def build_handoff(
+    user_input: str,
+    parser_mode: str,
+    validation_rows: List[Dict[str, str]],
+) -> Dict[str, Any]:
+    """Build and cache the complete generated handoff for the submitted form."""
+    if parser_mode == "LLM assistant":
+        parsed, ai_metadata = generate_llm_requirements(user_input)
+    else:
+        parsed, ai_metadata = generate_ai_requirements(user_input)
+
+    package = generate_design_package(user_input, parsed=parsed)
+    readiness = generate_design_readiness_review(package, validation_rows)
+    package["readiness_review"] = readiness
+    return {
+        "package": package,
+        "ai_metadata": ai_metadata,
+        "mode": parser_mode,
+        "input": user_input,
+    }
+
+
+def render_requirement_form() -> Tuple[bool, str, str]:
+    """Render requirement input controls and return submitted values."""
+    default_input = (
+        "Make me a USB-C powered indoor monitoring board with WiFi, Bluetooth, "
+        "temperature, humidity, and light sensing."
+    )
+    with st.form("pcb_requirement_form"):
+        user_input = st.text_area("Board requirements", value=default_input, height=110)
+        parser_mode = st.radio(
+            "Requirement extraction mode",
+            ["Base", "LLM assistant"],
+            horizontal=True,
+            help=(
+                "Base needs no setup. LLM assistant uses local Ollama with qwen2.5:3b "
+                "and falls back to Base if unavailable."
+            ),
+        )
+        if parser_mode == "Base":
+            st.info("Base mode is free, offline, and uses the controlled local assistant.")
+        else:
+            st.info(
+                f"LLM assistant uses local Ollama at {OLLAMA_URL_DEFAULT} with model {OLLAMA_MODEL_DEFAULT}. "
+                "Run `ollama pull qwen2.5:3b` and keep Ollama running. In Streamlit deployment, set "
+                "`OLLAMA_URL` to a reachable Ollama server. If unavailable, the app falls back to Base."
+            )
+        submitted = st.form_submit_button("Generate PCB Handoff", type="primary")
+    return submitted, user_input.strip(), parser_mode
+
+
+def render_cached_handoff(cached_handoff: Dict[str, Any]) -> None:
+    """Render the last generated handoff without recomputing it."""
+    package = cached_handoff["package"]
+    ai_metadata = cached_handoff["ai_metadata"]
+    selected_components = package["parsed"]["selected_components"]
+    variant = export_variant_slug(package)
+
+    st.caption(f"Generated from {cached_handoff['mode']} mode for: {cached_handoff['input']}")
+    render_ai_summary(package["parsed"], ai_metadata)
+    render_readiness_review(package["readiness_review"])
+    render_visual_section(package, selected_components)
+    render_detail_sections(package, variant)
+
+    with st.expander("5. Build Checks", expanded=False):
+        render_checklist("Fabrication and Assembly Checklist", package["fabrication_checklist"])
+        render_checklist("Bring-Up Checklist", package["bringup_checklist"])
+
+    st.header("Export Package")
+    st.caption("Download the full generated handoff report. Table-specific CSV exports are inside section 3.")
+    render_export_buttons(package)
 
 
 def main() -> None:
@@ -366,30 +536,20 @@ def main() -> None:
         "Generate a build-oriented 2-layer ESP32 sensor-board handoff from a controlled natural-language requirement."
     )
     render_scope_panel()
-    render_sensor_validation_panel()
+    validation_rows = render_sensor_validation_panel()
+    submitted, user_input, parser_mode = render_requirement_form()
 
-    default_input = (
-        "Make me a USB-C powered indoor monitoring board with WiFi, Bluetooth, "
-        "temperature, humidity, and light sensing."
-    )
-    user_input = st.text_area("Board requirements", value=default_input, height=110)
-    st.button("Refresh PCB Handoff", type="primary")
+    if submitted:
+        if user_input:
+            with st.spinner("Generating PCB handoff..."):
+                st.session_state["pcb_handoff"] = build_handoff(user_input, parser_mode, validation_rows)
+        else:
+            st.warning("Enter a board requirement before generating the PCB handoff.")
 
-    if user_input.strip():
-        package = generate_design_package(user_input.strip())
-        selected_components = package["parsed"]["selected_components"]
-        variant = export_variant_slug(package)
-
-        render_visual_section(package, selected_components)
-        render_detail_sections(package, variant)
-
-        with st.expander("5. Build Checks", expanded=False):
-            render_checklist("Fabrication and Assembly Checklist", package["fabrication_checklist"])
-            render_checklist("Bring-Up Checklist", package["bringup_checklist"])
-
-        st.header("Export Package")
-        st.caption("Download the full generated handoff report. Table-specific CSV exports are inside section 3.")
-        render_export_buttons(package)
+    if "pcb_handoff" in st.session_state:
+        render_cached_handoff(st.session_state["pcb_handoff"])
+    else:
+        st.info("Enter a requirement, choose a mode, then click **Generate PCB Handoff**.")
 
 
 if __name__ == "__main__":

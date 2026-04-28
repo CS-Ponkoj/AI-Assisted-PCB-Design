@@ -76,6 +76,18 @@ def generate_design_report_markdown(package: Dict[str, Any]) -> str:
     lines.append(rows_to_markdown_table("Power Budget", package["power_budget"]))
     lines.append(rows_to_markdown_table("2-Layer PCB Layout Instructions", package["layout_guidance"]))
 
+    readiness = package.get("readiness_review")
+    if readiness:
+        lines.extend(["## Design Readiness Review", ""])
+        lines.append(f"- Status: {readiness['status']}")
+        for item in readiness.get("blockers", []):
+            lines.append(f"- Blocker: {item}")
+        for item in readiness.get("review_items", []):
+            lines.append(f"- Needs review: {item}")
+        for item in readiness.get("passed", []):
+            lines.append(f"- Passed: {item}")
+        lines.append("")
+
     lines.extend(["## Schematic Summary", ""])
     lines.extend(f"- {line}" for line in package["schematic_summary"])
     lines.append("")
