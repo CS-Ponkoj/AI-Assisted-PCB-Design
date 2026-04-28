@@ -31,7 +31,11 @@ from src.design_generator import (
     generate_schematic_summary as generate_schematic_summary_for_context,
 )
 from src.exports import generate_export_package, rows_to_csv
-from src.llm_assistant import OLLAMA_MODEL_DEFAULT, OLLAMA_URL_DEFAULT, run_ollama_requirement_assistant
+from src.llm_assistant import (
+    OLLAMA_MODEL_DEFAULT,
+    check_ollama_status,
+    run_ollama_requirement_assistant,
+)
 from src.parser import ordered_requirements as ordered_requirements_for_context
 from src.parser import parse_requirements as parse_requirements_for_context
 from src.readiness import generate_design_readiness_review as generate_design_readiness_review_for_context
@@ -295,6 +299,8 @@ def render_ai_summary(parsed: Dict[str, Any], metadata: Dict[str, Any]) -> None:
                 {"Item": "Assistant enabled", "Value": str(ai_info.get("enabled"))},
                 {"Item": "Mode", "Value": str(ai_info.get("mode", mode))},
                 {"Item": "Model", "Value": str(metadata.get("model", ai_info.get("model", LOCAL_ASSISTANT_NAME)))},
+                {"Item": "Provider", "Value": str(metadata.get("provider", "In-app Base"))},
+                {"Item": "Endpoint", "Value": str(metadata.get("base_url", "Not used"))},
                 {"Item": "Confidence", "Value": str(ai_info.get("confidence"))},
                 {"Item": "Selected sensors", "Value": ", ".join(parsed["selected_components"]) or "None"},
                 {"Item": "Unsupported requests", "Value": ", ".join(parsed["unsupported_requirements"]) or "None"},
@@ -477,7 +483,57 @@ def build_handoff(
     }
 
 
-def render_requirement_form() -> Tuple[bool, str, str]:
+def render_mode_selector() -> str:
+    """Render the requirement extraction mode selector with Base selected first."""
+    parser_mode = st.radio(
+        "Requirement extraction mode",
+        ["Base", "LLM assistant"],
+        horizontal=True,
+        help=(
+            "Base needs no setup. LLM assistant uses an Ollama-compatible model server "
+            "and falls back to Base if unavailable."
+        ),
+    )
+    if parser_mode == "Base":
+        st.info("Base mode is active by default. It is free, offline, and runs inside the app.")
+    else:
+        render_llm_provider_status()
+    return parser_mode
+
+
+def render_llm_provider_status() -> None:
+    """Render the configured LLM provider endpoint and availability."""
+    status = check_ollama_status()
+    rows = [
+        {"Item": "Provider", "Value": status["provider"]},
+        {"Item": "Endpoint", "Value": status["base_url"]},
+        {"Item": "Model", "Value": status["model"]},
+        {"Item": "Server reachable", "Value": "Yes" if status["reachable"] else "No"},
+        {"Item": "Model available", "Value": "Yes" if status["model_available"] else "No"},
+        {"Item": "Auth configured", "Value": "Yes" if status["auth_configured"] else "No"},
+    ]
+    with st.expander("LLM Provider Status", expanded=True):
+        if status["reachable"] and status["model_available"]:
+            st.success("LLM assistant is ready. The app will still validate its output before generating the PCB handoff.")
+        elif status["reachable"]:
+            st.warning(
+                f"LLM server is reachable, but model {status['model']} was not listed. "
+                "Generation may fall back to Base mode."
+            )
+        else:
+            st.warning("LLM server is unavailable. Generate will use Base fallback if LLM mode is selected.")
+        st.table(rows)
+        if status["models"]:
+            st.caption("Available models: " + ", ".join(status["models"]))
+        if status["error"]:
+            st.caption(f"Last status error: {status['error']}")
+        st.caption(
+            "Configure deployment with OLLAMA_URL for a remote server. Optional auth can use "
+            "OLLAMA_API_KEY or OLLAMA_AUTH_HEADER."
+        )
+
+
+def render_requirement_form() -> Tuple[bool, str]:
     """Render requirement input controls and return submitted values."""
     default_input = (
         "Make me a USB-C powered indoor monitoring board with WiFi, Bluetooth, "
@@ -485,25 +541,8 @@ def render_requirement_form() -> Tuple[bool, str, str]:
     )
     with st.form("pcb_requirement_form"):
         user_input = st.text_area("Board requirements", value=default_input, height=110)
-        parser_mode = st.radio(
-            "Requirement extraction mode",
-            ["Base", "LLM assistant"],
-            horizontal=True,
-            help=(
-                "Base needs no setup. LLM assistant uses local Ollama with qwen2.5:3b "
-                "and falls back to Base if unavailable."
-            ),
-        )
-        if parser_mode == "Base":
-            st.info("Base mode is free, offline, and uses the controlled local assistant.")
-        else:
-            st.info(
-                f"LLM assistant uses local Ollama at {OLLAMA_URL_DEFAULT} with model {OLLAMA_MODEL_DEFAULT}. "
-                "Run `ollama pull qwen2.5:3b` and keep Ollama running. In Streamlit deployment, set "
-                "`OLLAMA_URL` to a reachable Ollama server. If unavailable, the app falls back to Base."
-            )
         submitted = st.form_submit_button("Generate PCB Handoff", type="primary")
-    return submitted, user_input.strip(), parser_mode
+    return submitted, user_input.strip()
 
 
 def render_cached_handoff(cached_handoff: Dict[str, Any]) -> None:
@@ -537,7 +576,8 @@ def main() -> None:
     )
     render_scope_panel()
     validation_rows = render_sensor_validation_panel()
-    submitted, user_input, parser_mode = render_requirement_form()
+    parser_mode = render_mode_selector()
+    submitted, user_input = render_requirement_form()
 
     if submitted:
         if user_input:

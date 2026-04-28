@@ -19,8 +19,8 @@ Only the selected I2C sensor footprints change.
 * Folder-based sensor definitions in `data/sensors/<sensor>/sensor.json`.
 * Built-in sensor plugin validation panel in the Streamlit UI.
 * Controlled natural-language extraction using sensor keywords from data files.
-* Two requirement modes: Base assistant and optional local LLM assistant.
-* Optional local LLM extraction through Ollama with `qwen2.5:3b`, no API key, and validated output.
+* Two requirement modes: Base assistant and optional LLM assistant.
+* Optional LLM extraction through an Ollama-compatible server with `qwen2.5:3b`, validated output, and Base fallback.
 * Design readiness review with Ready, Needs Review, or Blocked status.
 * Detailed output: parsed requirement, I/O table, BOM, pin map, netlist, power budget, schematic notes, layout notes, PCB visual, and build checks.
 * Table-adjacent export buttons for BOM CSV, pin map CSV, and netlist CSV, plus full Markdown and JSON report exports.
@@ -41,29 +41,41 @@ Base mode runs inside the app. It does not use an external API, does not require
 a private key, and does not add usage cost. It uses controlled synonyms and
 validation rules.
 
-LLM assistant mode is optional and uses a local Ollama server. Install Ollama,
-then run:
+LLM assistant mode is optional and uses an Ollama-compatible model server. For
+local development, install Ollama, then run:
 
 ```bash
 ollama pull qwen2.5:3b
 ollama serve
 ```
 
-The app calls `http://localhost:11434` by default and falls back to Base mode if
-Ollama is unavailable. Override the defaults with `OLLAMA_MODEL`, `OLLAMA_URL`,
-or `OLLAMA_TIMEOUT_SECONDS` if needed.
+The app calls `http://localhost:11434` by default for local development and
+falls back to Base mode if Ollama is unavailable. Override the defaults with:
 
-For Streamlit deployment, Base mode is the safest default because it runs fully
-inside the app. LLM assistant mode needs `OLLAMA_URL` to point to a reachable
-Ollama server; a deployed Streamlit app cannot use your laptop's `localhost`
-unless the app is also running on that same machine.
+```text
+OLLAMA_URL=https://your-reachable-ollama-server.example
+OLLAMA_MODEL=qwen2.5:3b
+OLLAMA_TIMEOUT_SECONDS=120
+OLLAMA_API_KEY=optional-bearer-token
+OLLAMA_AUTH_HEADER=optional-custom-header
+```
+
+`OLLAMA_AUTH_HEADER` can be either a full header value for `Authorization` or a
+`Header-Name: value` pair.
+
+For Streamlit deployment, Base mode is the safest default and remains selected
+first because it runs fully inside the app. LLM assistant mode needs `OLLAMA_URL`
+to point to a reachable Ollama-compatible server; a deployed Streamlit app cannot
+use your laptop's `localhost` unless the app is also running on that same
+machine.
 
 Do not commit the Ollama model files into this repository. The `qwen2.5:3b`
 model is about 1.9 GB after download and is served by Ollama as a local model
 runtime. A direct model link in the code is not enough by itself because the app
 also needs an inference server or runtime capable of loading that model. For a
-portable Streamlit Cloud demo, use Base mode. For LLM mode in deployment, run
-Ollama on a reachable host and set `OLLAMA_URL` in the Streamlit environment.
+portable Streamlit Cloud demo, use Base mode. For LLM mode in deployment, run a
+secured Ollama-compatible server on a reachable host and set `OLLAMA_URL` in the
+Streamlit environment.
 
 ## Usage
 
@@ -79,9 +91,11 @@ Then enter a requirement such as:
 Make me a USB-C powered indoor monitoring board with WiFi, Bluetooth, temperature, humidity, and light sensing.
 ```
 
-Choose `Base` or `LLM assistant`, then click `Generate PCB Handoff`. The app
-keeps the last generated result on screen so expanding sections or using export
-buttons does not regenerate the design.
+Choose `Base` or `LLM assistant`, then click `Generate PCB Handoff`. Base is the
+default active mode. When `LLM assistant` is selected, the app shows the
+configured provider endpoint, model, connection status, and whether the model is
+available. The app keeps the last generated result on screen so expanding
+sections or using export buttons does not regenerate the design.
 
 ## Project Structure
 

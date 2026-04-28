@@ -3,17 +3,78 @@
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Tuple
 
 from .ai_assistant import run_ai_requirement_assistant, validate_ai_extraction
 from .parser import ordered_requirements
-from .parser import parse_requirements as rule_based_parse_requirements
 
 
 OLLAMA_MODEL_DEFAULT = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 OLLAMA_URL_DEFAULT = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "").strip()
+OLLAMA_AUTH_HEADER = os.getenv("OLLAMA_AUTH_HEADER", "").strip()
+
+
+def get_ollama_provider_label(base_url: str = OLLAMA_URL_DEFAULT) -> str:
+    """Return a readable label for the configured Ollama provider."""
+    parsed_url = urllib.parse.urlparse(base_url)
+    host = parsed_url.hostname or ""
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        return "Local Ollama"
+    return "Remote Ollama"
+
+
+def build_ollama_headers(include_json: bool = False) -> Dict[str, str]:
+    """Build request headers for local or hosted Ollama-compatible servers."""
+    headers: Dict[str, str] = {}
+    if include_json:
+        headers["Content-Type"] = "application/json"
+
+    if OLLAMA_AUTH_HEADER:
+        if ":" in OLLAMA_AUTH_HEADER:
+            name, value = OLLAMA_AUTH_HEADER.split(":", 1)
+            headers[name.strip()] = value.strip()
+        else:
+            headers["Authorization"] = OLLAMA_AUTH_HEADER
+    elif OLLAMA_API_KEY:
+        headers["Authorization"] = f"Bearer {OLLAMA_API_KEY}"
+    return headers
+
+
+def check_ollama_status(
+    model: str = OLLAMA_MODEL_DEFAULT,
+    base_url: str = OLLAMA_URL_DEFAULT,
+    timeout: int = 5,
+) -> Dict[str, Any]:
+    """Check whether the configured Ollama server is reachable and has the model."""
+    status: Dict[str, Any] = {
+        "provider": get_ollama_provider_label(base_url),
+        "base_url": base_url,
+        "model": model,
+        "reachable": False,
+        "model_available": False,
+        "models": [],
+        "auth_configured": bool(OLLAMA_API_KEY or OLLAMA_AUTH_HEADER),
+        "error": "",
+    }
+    try:
+        request = urllib.request.Request(
+            url=base_url.rstrip("/") + "/api/tags",
+            headers=build_ollama_headers(),
+            method="GET",
+        )
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = json.loads(response.read().decode("utf-8"))
+        models = [item.get("name", "") for item in body.get("models", []) if item.get("name")]
+        status["reachable"] = True
+        status["models"] = models
+        status["model_available"] = model in models
+    except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, ValueError) as exc:
+        status["error"] = str(exc)
+    return status
 
 
 def build_ollama_prompt(
@@ -93,7 +154,7 @@ def call_ollama_generate(
     request = urllib.request.Request(
         url=base_url.rstrip("/") + "/api/generate",
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers=build_ollama_headers(include_json=True),
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -112,14 +173,6 @@ def run_ollama_requirement_assistant(
     base_url: str = OLLAMA_URL_DEFAULT,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Run Ollama extraction and fall back to the base assistant if unavailable."""
-    rule_based_result = rule_based_parse_requirements(
-        user_input,
-        sensor_library,
-        supported_sensors,
-        sensor_keywords,
-        requirement_groups,
-        requirement_config,
-    )
     local_parsed, _ = run_ai_requirement_assistant(
         user_input,
         sensor_library,
@@ -173,6 +226,8 @@ def run_ollama_requirement_assistant(
             "used_ai": True,
             "mode": "ollama",
             "model": model,
+            "provider": get_ollama_provider_label(base_url),
+            "base_url": base_url,
             "notes": notes,
         }
     except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, ValueError) as exc:
@@ -190,5 +245,7 @@ def run_ollama_requirement_assistant(
             f"Ollama LLM was unavailable or returned invalid JSON; used Base assistant. Detail: {exc}",
         )
         metadata["mode"] = "local_fallback"
+        metadata["provider"] = get_ollama_provider_label(base_url)
+        metadata["base_url"] = base_url
         metadata["fallback_reason"] = str(exc)
         return parsed, metadata

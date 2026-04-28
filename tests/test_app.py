@@ -6,7 +6,12 @@ from unittest.mock import patch
 
 import app
 from src.ai_assistant import validate_ai_extraction
-from src.llm_assistant import run_ollama_requirement_assistant
+from src.llm_assistant import (
+    build_ollama_headers,
+    check_ollama_status,
+    get_ollama_provider_label,
+    run_ollama_requirement_assistant,
+)
 
 
 class PcbGeneratorTests(unittest.TestCase):
@@ -202,6 +207,7 @@ class PcbGeneratorTests(unittest.TestCase):
         self.assertEqual(meta["mode"], "local_fallback")
         self.assertEqual(parsed["selected_components"], ["AHT20", "BH1750"])
         self.assertEqual(parsed["ai_assistant"]["mode"], "local_fallback")
+        self.assertEqual(meta["provider"], "Local Ollama")
 
     def test_llm_assistant_cannot_drop_base_detections(self):
         with patch(
@@ -227,6 +233,30 @@ class PcbGeneratorTests(unittest.TestCase):
         self.assertEqual(parsed["selected_components"], ["AHT20", "BH1750", "SGP30"])
         self.assertIn("camera", parsed["unsupported_requirements"])
         self.assertTrue(any("Preserved Base assistant" in note for note in meta["notes"]))
+
+    def test_ollama_provider_helpers_support_remote_endpoints_and_auth(self):
+        self.assertEqual(get_ollama_provider_label("http://localhost:11434"), "Local Ollama")
+        self.assertEqual(get_ollama_provider_label("https://models.example.com"), "Remote Ollama")
+
+        with patch("src.llm_assistant.OLLAMA_API_KEY", "test-key"), patch(
+            "src.llm_assistant.OLLAMA_AUTH_HEADER",
+            "",
+        ):
+            headers = build_ollama_headers(include_json=True)
+        self.assertEqual(headers["Content-Type"], "application/json")
+        self.assertEqual(headers["Authorization"], "Bearer test-key")
+
+    def test_ollama_status_reports_unreachable_remote_server(self):
+        status = check_ollama_status(
+            model="qwen2.5:3b",
+            base_url="http://127.0.0.1:1",
+            timeout=1,
+        )
+
+        self.assertEqual(status["provider"], "Local Ollama")
+        self.assertFalse(status["reachable"])
+        self.assertFalse(status["model_available"])
+        self.assertTrue(status["error"])
 
     def test_local_assistant_validation_keeps_output_inside_supported_hardware(self):
         rule_based = app.parse_requirements("room comfort brightness and camera")
