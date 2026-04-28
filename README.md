@@ -47,6 +47,44 @@ streamlit run app.py
 Base mode works immediately after this step. It runs inside the app with no
 model server, no API key, and no usage cost.
 
+## Convenient Full Setup For LLM Mode
+
+`requirements.txt` only installs Python packages. It cannot install Ollama or
+pull an LLM model by itself.
+
+For convenience, this repo includes setup scripts that install the Python
+requirements and pull the default local LLM model. Install Ollama first from:
+
+```text
+https://ollama.com/download
+```
+
+If Ollama is already installed, skip that install step.
+
+On Windows PowerShell:
+
+```powershell
+.\scripts\setup_llm.ps1
+```
+
+On macOS/Linux:
+
+```bash
+bash scripts/setup_llm.sh
+```
+
+The scripts pull:
+
+```text
+qwen2.5:3b
+```
+
+After setup, run:
+
+```bash
+streamlit run app.py
+```
+
 ## Enable LLM Mode Locally
 
 The app has two requirement modes:
@@ -167,6 +205,9 @@ AI_PCB_Design/
   app.py
   requirements.txt
   README.md
+  scripts/
+    setup_llm.ps1
+    setup_llm.sh
   src/
     __init__.py
     ai_assistant.py
