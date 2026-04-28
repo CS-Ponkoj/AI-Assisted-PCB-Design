@@ -26,9 +26,10 @@ Only the selected I2C sensor footprints change.
 * Table-adjacent export buttons for BOM CSV, pin map CSV, and netlist CSV, plus full Markdown and JSON report exports.
 * Unsupported requests are reported instead of being turned into imaginary hardware.
 
-## Installation
+## Quick Start
 
-Install Python 3.8 or later:
+From the project root, install Python 3.8 or later, then install the project
+dependencies:
 
 ```bash
 pip install -r requirements.txt
@@ -37,20 +38,110 @@ pip install -r requirements.txt
 The Graphviz Python package is used for schematic/architecture diagrams. Some
 systems also require the Graphviz `dot` executable to be installed separately.
 
-Base mode runs inside the app. It does not use an external API, does not require
-a private key, and does not add usage cost. It uses controlled synonyms and
-validation rules.
+Run the app:
 
-LLM assistant mode is optional and uses an Ollama-compatible model server. For
-local development, install Ollama, then run:
+```bash
+streamlit run app.py
+```
+
+Base mode works immediately after this step. It runs inside the app with no
+model server, no API key, and no usage cost.
+
+## Enable LLM Mode Locally
+
+The app has two requirement modes:
+
+* `Base`: controlled local parsing and validation, always available.
+* `LLM assistant`: uses an Ollama-compatible model server with `qwen2.5:3b`, then validates the model output before generating the PCB handoff.
+
+To use both modes locally, install Ollama if it is not already installed on your
+device:
+
+```text
+https://ollama.com/download
+```
+
+If Ollama is already installed, you can skip the install step.
+
+Pull the lightweight model:
 
 ```bash
 ollama pull qwen2.5:3b
+```
+
+Confirm the model is available:
+
+```bash
+ollama list
+```
+
+Make sure Ollama is running. On many desktop installs, opening the Ollama app is
+enough. If needed, run this in a separate terminal:
+
+```bash
 ollama serve
 ```
 
-The app calls `http://localhost:11434` by default for local development and
-falls back to Base mode if Ollama is unavailable. Override the defaults with:
+If `ollama serve` says the address is already in use, Ollama is already running.
+
+Then start the Streamlit app:
+
+```bash
+streamlit run app.py
+```
+
+By default, LLM mode uses:
+
+```text
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:3b
+```
+
+If Ollama is not available, LLM mode falls back to Base mode so the prototype can
+still generate a PCB handoff.
+
+Do not commit the Ollama model files into this repository. The `qwen2.5:3b`
+model is about 1.9 GB after download and is served by Ollama as a local model
+runtime. The app needs a running model server, not just a model file or direct
+download link.
+
+## Usage
+
+Enter a requirement such as:
+
+```text
+Make me a USB-C powered indoor monitoring board with WiFi, Bluetooth, temperature, humidity, and light sensing.
+```
+
+Choose `Base` or `LLM assistant`, then click `Generate PCB Handoff`. Base is the
+default active mode. When `LLM assistant` is selected, the app shows the
+configured provider endpoint, model, connection status, and whether the model is
+available. The app keeps the last generated result on screen so expanding
+sections or using export buttons does not regenerate the design.
+
+## LLM Server Configuration
+
+To use a remote Ollama-compatible server instead of local Ollama:
+
+```bash
+OLLAMA_URL=https://your-reachable-ollama-server.example
+OLLAMA_MODEL=qwen2.5:3b
+streamlit run app.py
+```
+
+On Windows PowerShell, use:
+
+```powershell
+$env:OLLAMA_URL="https://your-reachable-ollama-server.example"
+$env:OLLAMA_MODEL="qwen2.5:3b"
+streamlit run app.py
+```
+
+If the server needs auth, also set `OLLAMA_API_KEY` or `OLLAMA_AUTH_HEADER`.
+If no model server is available, LLM mode falls back to Base mode, so the app
+still generates a PCB handoff.
+
+Optional environment variables:
 
 ```text
 OLLAMA_URL=https://your-reachable-ollama-server.example
@@ -63,39 +154,10 @@ OLLAMA_AUTH_HEADER=optional-custom-header
 `OLLAMA_AUTH_HEADER` can be either a full header value for `Authorization` or a
 `Header-Name: value` pair.
 
-For Streamlit deployment, Base mode is the safest default and remains selected
-first because it runs fully inside the app. LLM assistant mode needs `OLLAMA_URL`
-to point to a reachable Ollama-compatible server; a deployed Streamlit app cannot
-use your laptop's `localhost` unless the app is also running on that same
-machine.
-
-Do not commit the Ollama model files into this repository. The `qwen2.5:3b`
-model is about 1.9 GB after download and is served by Ollama as a local model
-runtime. A direct model link in the code is not enough by itself because the app
-also needs an inference server or runtime capable of loading that model. For a
-portable Streamlit Cloud demo, use Base mode. For LLM mode in deployment, run a
-secured Ollama-compatible server on a reachable host and set `OLLAMA_URL` in the
-Streamlit environment.
-
-## Usage
-
-Run:
-
-```bash
-streamlit run app.py
-```
-
-Then enter a requirement such as:
-
-```text
-Make me a USB-C powered indoor monitoring board with WiFi, Bluetooth, temperature, humidity, and light sensing.
-```
-
-Choose `Base` or `LLM assistant`, then click `Generate PCB Handoff`. Base is the
-default active mode. When `LLM assistant` is selected, the app shows the
-configured provider endpoint, model, connection status, and whether the model is
-available. The app keeps the last generated result on screen so expanding
-sections or using export buttons does not regenerate the design.
+For Streamlit deployment, Base mode is the safest default because it runs fully
+inside the app. LLM assistant mode needs `OLLAMA_URL` to point to a reachable
+Ollama-compatible server; a deployed Streamlit app cannot use your laptop's
+`localhost` unless the app is also running on that same machine.
 
 ## Project Structure
 
@@ -105,8 +167,6 @@ AI_PCB_Design/
   app.py
   requirements.txt
   README.md
-  docs/
-    AI-Assisted PCB Design Generator.docx
   src/
     __init__.py
     ai_assistant.py
@@ -131,8 +191,6 @@ AI_PCB_Design/
       README.md
     web_sources/
       sensor_info.md
-  prompts/
-    extraction_prompt.txt
   tests/
     test_app.py
   files/
