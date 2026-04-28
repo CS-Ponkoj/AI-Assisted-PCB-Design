@@ -10,3 +10,4 @@ files/*.csv
 files/*.json
 files/*.md
 prompts/
+docs/
