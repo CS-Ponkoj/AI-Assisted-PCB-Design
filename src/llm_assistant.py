@@ -11,11 +11,25 @@ from .ai_assistant import run_ai_requirement_assistant, validate_ai_extraction
 from .parser import ordered_requirements
 
 
-OLLAMA_MODEL_DEFAULT = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
-OLLAMA_URL_DEFAULT = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "120"))
+OLLAMA_MODEL_DEFAULT = os.getenv("OLLAMA_MODEL", "qwen2.5:3b").strip() or "qwen2.5:3b"
+OLLAMA_URL_DEFAULT = os.getenv("OLLAMA_URL", "http://localhost:11434").strip() or "http://localhost:11434"
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "").strip()
 OLLAMA_AUTH_HEADER = os.getenv("OLLAMA_AUTH_HEADER", "").strip()
+
+
+def read_int_env(name: str, default: int) -> int:
+    """Read a positive integer environment variable without failing at import time."""
+    value = os.getenv(name, "").strip()
+    if not value:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError:
+        return default
+    return parsed if parsed > 0 else default
+
+
+OLLAMA_TIMEOUT_SECONDS = read_int_env("OLLAMA_TIMEOUT_SECONDS", 120)
 
 
 def get_ollama_provider_label(base_url: str = OLLAMA_URL_DEFAULT) -> str:

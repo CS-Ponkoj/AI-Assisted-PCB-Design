@@ -10,6 +10,7 @@ from src.llm_assistant import (
     build_ollama_headers,
     check_ollama_status,
     get_ollama_provider_label,
+    read_int_env,
     run_ollama_requirement_assistant,
 )
 
@@ -245,6 +246,16 @@ class PcbGeneratorTests(unittest.TestCase):
             headers = build_ollama_headers(include_json=True)
         self.assertEqual(headers["Content-Type"], "application/json")
         self.assertEqual(headers["Authorization"], "Bearer test-key")
+
+    def test_ollama_timeout_env_is_import_safe(self):
+        with patch.dict("os.environ", {"BAD_TIMEOUT": ""}):
+            self.assertEqual(read_int_env("BAD_TIMEOUT", 120), 120)
+        with patch.dict("os.environ", {"BAD_TIMEOUT": "abc"}):
+            self.assertEqual(read_int_env("BAD_TIMEOUT", 120), 120)
+        with patch.dict("os.environ", {"BAD_TIMEOUT": "-5"}):
+            self.assertEqual(read_int_env("BAD_TIMEOUT", 120), 120)
+        with patch.dict("os.environ", {"BAD_TIMEOUT": "30"}):
+            self.assertEqual(read_int_env("BAD_TIMEOUT", 120), 30)
 
     def test_ollama_status_reports_unreachable_remote_server(self):
         status = check_ollama_status(
