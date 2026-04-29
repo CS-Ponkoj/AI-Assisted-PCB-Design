@@ -14,7 +14,7 @@ from src.data_loader import (
     load_json,
     load_sensor_definitions,
 )
-from src.ai_assistant import LOCAL_ASSISTANT_NAME, run_ai_requirement_assistant
+from src.base_assistant import LOCAL_ASSISTANT_NAME, run_ai_requirement_assistant
 from src.design_generator import (
     assign_sensor_refs as assign_sensor_refs_for_context,
     generate_assumptions as generate_assumptions_for_context,
@@ -36,7 +36,7 @@ from src.gemini_assistant import (
     check_gemini_status,
     run_gemini_requirement_assistant,
 )
-from src.llm_assistant import (
+from src.ollama_assistant import (
     OLLAMA_MODEL_DEFAULT,
     check_ollama_status,
     run_ollama_requirement_assistant,
@@ -307,13 +307,13 @@ def render_ai_summary(parsed: Dict[str, Any], metadata: Dict[str, Any]) -> None:
     with st.expander("Requirement Assistant", expanded=bool(metadata.get("used_ai"))):
         mode = metadata.get("mode", ai_info.get("mode", "local"))
         if mode == "ollama":
-            st.success(f"LLM assistant used Ollama model {metadata.get('model', OLLAMA_MODEL_DEFAULT)}.")
+            st.success(f"Ollama LLM used model {metadata.get('model', OLLAMA_MODEL_DEFAULT)}.")
         elif mode == "gemini":
-            st.success(f"LLM assistant used Gemini model {metadata.get('model', GEMINI_MODEL_DEFAULT)}.")
+            st.success(f"Gemini API used model {metadata.get('model', GEMINI_MODEL_DEFAULT)}.")
         elif mode == "gemini_fallback":
             st.warning("Gemini API was requested, but the app used Base assistant fallback.")
         elif mode == "local_fallback":
-            st.warning("LLM assistant was requested, but the app used Base assistant fallback.")
+            st.warning("Ollama LLM was requested, but the app used Base assistant fallback.")
         elif metadata.get("used_ai"):
             st.success(f"Base assistant used: {metadata.get('model', LOCAL_ASSISTANT_NAME)}.")
         else:
@@ -540,9 +540,9 @@ def render_ollama_provider_status() -> None:
         {"Item": "Model available", "Value": "Yes" if status["model_available"] else "No"},
         {"Item": "Auth configured", "Value": "Yes" if status["auth_configured"] else "No"},
     ]
-    with st.expander("LLM Provider Status", expanded=True):
+    with st.expander("Ollama Provider Status", expanded=True):
         if status["reachable"] and status["model_available"]:
-            st.success("LLM assistant is ready. The app will still validate its output before generating the PCB handoff.")
+            st.success("Ollama LLM is ready. The app will still validate its output before generating the PCB handoff.")
         elif status["reachable"]:
             st.warning(
                 f"LLM server is reachable, but model {status['model']} was not listed. "
@@ -570,6 +570,7 @@ def render_gemini_provider_status() -> None:
         {"Item": "API key configured", "Value": "Yes" if status["api_key_configured"] else "No"},
         {"Item": "Max input characters", "Value": str(status["max_input_chars"])},
         {"Item": "Max output tokens", "Value": str(status["max_output_tokens"])},
+        {"Item": "Fallback models", "Value": ", ".join(status["fallback_models"]) or "None"},
         {"Item": "Fallback", "Value": status["fallback"]},
     ]
     with st.expander("Gemini Provider Status", expanded=True):

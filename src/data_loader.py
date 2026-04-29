@@ -106,9 +106,9 @@ def build_sensor_reference_map(
 ) -> Dict[str, str]:
     """Build stable reference designators for all known sensor footprints."""
     refs: Dict[str, str] = {}
-    legacy_refs = board_template.get("pcb_visual", {}).get("sensor_refs", {})
+    template_refs = board_template.get("pcb_visual", {}).get("sensor_refs", {})
     for component, sensor in sensor_library.items():
-        visual_ref = sensor.get("visual", {}).get("ref") or legacy_refs.get(component)
+        visual_ref = sensor.get("visual", {}).get("ref") or template_refs.get(component)
         if visual_ref:
             refs[component] = visual_ref
 

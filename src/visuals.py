@@ -70,30 +70,6 @@ def generate_schematic_diagram(selected_components: List[str], sensor_library: D
     return dot
 
 
-def generate_pcb_layout(selected_components: List[str]) -> graphviz.Digraph:
-    """Create a symbolic PCB layout guidance diagram."""
-    dot = graphviz.Digraph(name="layout", format="png")
-    dot.attr(rankdir="LR", fontsize="8")
-
-    with dot.subgraph(name="cluster_board") as c:
-        c.attr(label="2-layer PCB placement zones", style="rounded,filled", fillcolor="#F7F7F7", color="#888888")
-        c.node("USB", "J1\nUSB-C\nboard edge", shape="box", style="filled", fillcolor="#F6C85F")
-        c.node("PWR", "U1 + C1-C3\npower zone", shape="box", style="filled", fillcolor="#F6C85F")
-        c.node("ESP", "U2 ESP32\nantenna at edge\nkeepout", shape="box", style="filled", fillcolor="#9DD9D2")
-        c.node("DBG", "TP1-TP5\nbring-up pads", shape="box", style="filled", fillcolor="#D8D8D8")
-        c.node("UI", "D1 + SW1\nuser access", shape="box", style="filled", fillcolor="#D8D8D8")
-        for comp in selected_components:
-            c.node(comp, f"{comp}\nexposed sensor zone", shape="box", style="filled", fillcolor="#B8D8F0")
-
-    dot.edge("USB", "PWR", label="VBUS_5V / GND", color="#EF6C00")
-    dot.edge("PWR", "ESP", label="3V3 / GND", color="#C47F00")
-    dot.edge("ESP", "DBG", label="SDA/SCL test", color="#3366AA")
-    dot.edge("ESP", "UI", label="GPIO2 / EN", color="#3366AA")
-    for comp in selected_components:
-        dot.edge("ESP", comp, label="I2C + 3V3 + GND", color="#3366AA")
-    return dot
-
-
 def svg_text(x: int, y: int, text: str, size: int = 13, weight: str = "500", fill: str = "#102018") -> str:
     """Create an SVG text element."""
     return (
@@ -147,8 +123,8 @@ def get_sensor_visual_positions(
                 "placement": visual.get("placement", "sensor zone"),
             }
 
-    legacy_visual = board_template.get("pcb_visual", {})
-    for component, position in legacy_visual.get("sensor_positions", {}).items():
+    template_visual = board_template.get("pcb_visual", {})
+    for component, position in template_visual.get("sensor_positions", {}).items():
         sensor_positions.setdefault(component, dict(position))
 
     next_auto_y = 72

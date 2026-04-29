@@ -5,13 +5,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 import app
-from src.ai_assistant import validate_ai_extraction
+from src.base_assistant import validate_ai_extraction
 from src.gemini_assistant import (
     check_gemini_status,
     get_gemini_api_key,
+    get_gemini_model_candidates,
     run_gemini_requirement_assistant,
 )
-from src.llm_assistant import (
+from src.ollama_assistant import (
     build_ollama_headers,
     check_ollama_status,
     get_ollama_provider_label,
@@ -217,7 +218,7 @@ class PcbGeneratorTests(unittest.TestCase):
 
     def test_llm_assistant_cannot_drop_base_detections(self):
         with patch(
-            "src.llm_assistant.call_ollama_generate",
+            "src.ollama_assistant.call_ollama_generate",
             return_value={
                 "requested_sensing": ["temperature"],
                 "selected_components": ["AHT20"],
@@ -244,8 +245,8 @@ class PcbGeneratorTests(unittest.TestCase):
         self.assertEqual(get_ollama_provider_label("http://localhost:11434"), "Local Ollama")
         self.assertEqual(get_ollama_provider_label("https://models.example.com"), "Remote Ollama")
 
-        with patch("src.llm_assistant.OLLAMA_API_KEY", "test-key"), patch(
-            "src.llm_assistant.OLLAMA_AUTH_HEADER",
+        with patch("src.ollama_assistant.OLLAMA_API_KEY", "test-key"), patch(
+            "src.ollama_assistant.OLLAMA_AUTH_HEADER",
             "",
         ):
             headers = build_ollama_headers(include_json=True)
@@ -295,7 +296,14 @@ class PcbGeneratorTests(unittest.TestCase):
 
         self.assertTrue(status["api_key_configured"])
         self.assertEqual(status["provider"], "Gemini API")
+        self.assertIn("gemini-2.5-flash", status["fallback_models"])
         self.assertNotIn("secret-key", json.dumps(status))
+
+    def test_gemini_model_candidates_are_unique(self):
+        candidates = get_gemini_model_candidates("gemini-2.5-flash-lite")
+
+        self.assertEqual(candidates[0], "gemini-2.5-flash-lite")
+        self.assertEqual(len(candidates), len(set(candidates)))
 
     def test_gemini_falls_back_when_api_key_missing(self):
         with patch("src.gemini_assistant.get_gemini_api_key", return_value=""):
@@ -381,6 +389,38 @@ class PcbGeneratorTests(unittest.TestCase):
         self.assertEqual(meta["mode"], "gemini_fallback")
         self.assertEqual(parsed["selected_components"], ["AHT20", "BH1750"])
         self.assertIn("quota exceeded", meta["fallback_reason"])
+
+    def test_gemini_uses_fallback_model_before_base_fallback(self):
+        def fake_generate(_prompt, api_key, model):
+            if model == "primary-model":
+                raise RuntimeError("temporary demand")
+            return {
+                "requested_sensing": ["temperature"],
+                "selected_components": ["AHT20"],
+                "unsupported_requirements": [],
+                "confidence": "high",
+                "notes": ["Fallback model succeeded."],
+            }
+
+        with patch("src.gemini_assistant.call_gemini_generate", side_effect=fake_generate), patch(
+            "src.gemini_assistant.GEMINI_MODEL_FALLBACKS",
+            ["fallback-model"],
+        ):
+            parsed, meta = run_gemini_requirement_assistant(
+                "temperature",
+                app.SENSOR_LIBRARY,
+                app.SUPPORTED_SENSORS,
+                app.SENSOR_KEYWORDS,
+                app.REQUIREMENT_GROUPS,
+                app.REQUIREMENT_CONFIG,
+                api_key="fake-key",
+                model="primary-model",
+            )
+
+        self.assertEqual(meta["mode"], "gemini")
+        self.assertEqual(meta["model"], "fallback-model")
+        self.assertEqual(parsed["selected_components"], ["AHT20"])
+        self.assertTrue(any("fallback model" in note.lower() for note in meta["notes"]))
 
     def test_local_assistant_validation_keeps_output_inside_supported_hardware(self):
         rule_based = app.parse_requirements("room comfort brightness and camera")

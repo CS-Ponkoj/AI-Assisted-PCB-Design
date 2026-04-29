@@ -7,7 +7,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Tuple
 
-from .ai_assistant import run_ai_requirement_assistant, validate_ai_extraction
+from .base_assistant import run_ai_requirement_assistant, validate_ai_extraction
 from .parser import ordered_requirements
 
 

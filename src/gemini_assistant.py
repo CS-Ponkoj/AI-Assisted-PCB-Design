@@ -4,15 +4,38 @@ import json
 import os
 from typing import Any, Dict, List, Optional, Tuple
 
-from .ai_assistant import run_ai_requirement_assistant, validate_ai_extraction
-from .llm_assistant import extract_json_object, read_int_env
+from .base_assistant import run_ai_requirement_assistant, validate_ai_extraction
+from .ollama_assistant import extract_json_object, read_int_env
 from .parser import ordered_requirements
 
 
-GEMINI_MODEL_DEFAULT = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
+GEMINI_MODEL_DEFAULT = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite").strip() or "gemini-2.5-flash-lite"
 GEMINI_TIMEOUT_SECONDS = read_int_env("GEMINI_TIMEOUT_SECONDS", 60)
 GEMINI_MAX_INPUT_CHARS = read_int_env("GEMINI_MAX_INPUT_CHARS", 1200)
 GEMINI_MAX_OUTPUT_TOKENS = read_int_env("GEMINI_MAX_OUTPUT_TOKENS", 350)
+GEMINI_MODEL_FALLBACKS = [
+    model.strip()
+    for model in os.getenv("GEMINI_MODEL_FALLBACKS", "gemini-2.5-flash,gemini-2.0-flash-lite").split(",")
+    if model.strip()
+]
+
+GEMINI_RESPONSE_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "requested_sensing": {"type": "array", "items": {"type": "string"}},
+        "selected_components": {"type": "array", "items": {"type": "string"}},
+        "unsupported_requirements": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+        "notes": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": [
+        "requested_sensing",
+        "selected_components",
+        "unsupported_requirements",
+        "confidence",
+        "notes",
+    ],
+}
 
 
 def get_gemini_api_key(secrets: Optional[Any] = None) -> str:
@@ -46,8 +69,18 @@ def check_gemini_status(secrets: Optional[Any] = None, model: str = GEMINI_MODEL
         "api_key_configured": bool(get_gemini_api_key(secrets)),
         "max_input_chars": GEMINI_MAX_INPUT_CHARS,
         "max_output_tokens": GEMINI_MAX_OUTPUT_TOKENS,
+        "fallback_models": [candidate for candidate in get_gemini_model_candidates(model) if candidate != model],
         "fallback": "Base",
     }
+
+
+def get_gemini_model_candidates(model: str = GEMINI_MODEL_DEFAULT) -> List[str]:
+    """Return unique Gemini model candidates from primary plus fallback models."""
+    candidates: List[str] = []
+    for candidate in [model] + GEMINI_MODEL_FALLBACKS:
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+    return candidates
 
 
 def build_gemini_prompt(
@@ -111,6 +144,7 @@ def call_gemini_generate(
             temperature=0,
             max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
             response_mime_type="application/json",
+            response_schema=GEMINI_RESPONSE_SCHEMA,
         ),
     )
     return extract_json_object(response.text or "{}")
@@ -149,10 +183,24 @@ def run_gemini_requirement_assistant(
         return local_parsed, local_metadata
 
     prompt = build_gemini_prompt(user_input, local_parsed, sensor_library, requirement_config)
+    provider_errors: List[str] = []
     try:
-        gemini_result = call_gemini_generate(prompt, api_key=resolved_api_key, model=model)
+        gemini_result: Dict[str, Any] = {}
+        used_model = model
+        for candidate_model in get_gemini_model_candidates(model):
+            try:
+                gemini_result = call_gemini_generate(prompt, api_key=resolved_api_key, model=candidate_model)
+                used_model = candidate_model
+                break
+            except Exception as exc:
+                provider_errors.append(f"{candidate_model}: {exc}")
+        else:
+            raise RuntimeError("; ".join(provider_errors))
+
         merged_result = dict(gemini_result)
         merge_notes: List[str] = []
+        if used_model != model:
+            merge_notes.append(f"Gemini primary model failed; used fallback model {used_model}.")
 
         requested_sensing = list(gemini_result.get("requested_sensing", []))
         for requirement in local_parsed.get("requested_sensing", []):
@@ -186,12 +234,12 @@ def run_gemini_requirement_assistant(
         parsed["selected_components"] = selected_components
 
         parsed["ai_assistant"]["mode"] = "gemini"
-        parsed["ai_assistant"]["model"] = model
+        parsed["ai_assistant"]["model"] = used_model
         parsed["ai_assistant"]["notes"] = notes
         return parsed, {
             "used_ai": True,
             "mode": "gemini",
-            "model": model,
+            "model": used_model,
             "provider": "Gemini API",
             "base_url": "Google Gemini API",
             "notes": notes,

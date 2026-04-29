@@ -2,12 +2,15 @@ __pycache__/
 *.py[cod]
 ~$*.docx
 
-.streamlit/
 .pytest_cache/
 .mypy_cache/
 
-files/*.csv
-files/*.json
-files/*.md
-prompts/
+# Local secrets for Gemini / Streamlit deployment.
+# Keep API keys out of GitHub.
+.streamlit/
+
+# Local notes, archived data, and generated handoff artifacts.
 docs/
+prompts/
+data/legacy/
+files/

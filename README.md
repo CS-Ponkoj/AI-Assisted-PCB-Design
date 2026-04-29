@@ -227,15 +227,16 @@ GEMINI_API_KEY = "your-key-here"
 Optional Gemini environment variables:
 
 ```text
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-2.5-flash-lite
+GEMINI_MODEL_FALLBACKS=gemini-2.5-flash,gemini-2.0-flash-lite
 GEMINI_TIMEOUT_SECONDS=60
 GEMINI_MAX_INPUT_CHARS=1200
 GEMINI_MAX_OUTPUT_TOKENS=350
 ```
 
 If the Gemini key is missing, the API returns an error, or the model returns
-invalid JSON, Gemini mode falls back to Base mode. The API key is never displayed
-in the app UI.
+invalid JSON, Gemini mode first tries the configured fallback Gemini models and
+then falls back to Base mode. The API key is never displayed in the app UI.
 
 ## Project Structure
 
@@ -250,12 +251,12 @@ AI_PCB_Design/
     setup_llm.sh
   src/
     __init__.py
-    ai_assistant.py
+    base_assistant.py
     data_loader.py
     design_generator.py
     exports.py
     gemini_assistant.py
-    llm_assistant.py
+    ollama_assistant.py
     parser.py
     readiness.py
     validation.py
@@ -269,15 +270,21 @@ AI_PCB_Design/
       BH1750/sensor.json
       SGP30/sensor.json
       BMP280/sensor.json
-    legacy/
-      README.md
     web_sources/
       sensor_info.md
   tests/
     test_app.py
-  files/
-    generated demo/export artifacts
 ```
+
+## Local-Only Files
+
+These folders are intentionally ignored by Git:
+
+* `.streamlit/`: local Streamlit secrets such as `GEMINI_API_KEY`.
+* `docs/`: personal demo notes or talking-point drafts.
+* `prompts/`: local prompt experiments.
+* `files/`: generated CSV, JSON, Markdown, or PDF handoff artifacts.
+* `data/legacy/`: archived data from earlier prototype versions.
 
 ## Code Organization
 
@@ -285,8 +292,8 @@ AI_PCB_Design/
 * `src/data_loader.py` contains JSON loading and sensor-library indexing helpers.
 * `src/validation.py` contains sensor plugin schema checks.
 * `src/parser.py` contains controlled requirement extraction from user input.
-* `src/ai_assistant.py` contains the Base local requirement assistant and output validation.
-* `src/llm_assistant.py` contains the optional Ollama / `qwen2.5:3b` requirement assistant.
+* `src/base_assistant.py` contains the Base local requirement assistant and output validation.
+* `src/ollama_assistant.py` contains the optional Ollama / `qwen2.5:3b` requirement assistant.
 * `src/gemini_assistant.py` contains the optional Gemini API requirement assistant.
 * `src/design_generator.py` contains BOM, pin map, netlist, power budget, checklist, and report data generation.
 * `src/readiness.py` contains the Ready / Needs Review / Blocked design review logic.
