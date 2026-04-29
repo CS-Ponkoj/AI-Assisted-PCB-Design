@@ -172,6 +172,8 @@ class PcbGeneratorTests(unittest.TestCase):
         self.assertGreaterEqual(app.calculate_pcb_visual_height(), 640)
         svg = app.generate_pcb_visual_svg(["AHT20"], {"AHT20": "U3"})
         self.assertIn("Clear top-view PCB layout visual", svg)
+        self.assertIn('viewBox="0 0 860 560"', svg)
+        self.assertIn("pcb-workbench", svg)
         self.assertIn("pcb-detail-panel", svg)
         self.assertIn('data-detail="AHT20"', svg)
         self.assertIn('data-detail="TRACE_3V3"', svg)

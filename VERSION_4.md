@@ -25,7 +25,7 @@ The PCB layout visual now supports click-based inspection for:
 - optional DNP sensor footprints
 - key routed nets/traces
 
-Clicking an item updates an inspector panel below the board visual.
+Clicking an item updates an inspector panel beside the board visual.
 
 ### Inspector Panel
 

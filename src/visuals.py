@@ -165,14 +165,21 @@ def get_sensor_visual_positions(
     return sensor_positions
 
 
+def calculate_pcb_board_height(
+    sensor_library: Dict[str, Dict[str, Any]],
+    board_template: Dict[str, Any],
+) -> int:
+    """Return the actual SVG board height without inspector padding."""
+    sensor_positions = get_sensor_visual_positions(sensor_library, board_template)
+    return max(560, max(int(position["y"]) + int(position["h"]) + 104 for position in sensor_positions.values()))
+
+
 def calculate_pcb_visual_height(
     sensor_library: Dict[str, Dict[str, Any]],
     board_template: Dict[str, Any],
 ) -> int:
-    """Return iframe height needed for the current PCB visual."""
-    sensor_positions = get_sensor_visual_positions(sensor_library, board_template)
-    board_height = max(560, max(int(position["y"]) + int(position["h"]) + 104 for position in sensor_positions.values()))
-    return board_height + 340
+    """Return iframe height needed for the board plus visible inspector panel."""
+    return calculate_pcb_board_height(sensor_library, board_template) + 90
 
 
 def row_matches_ref(row_ref: str, ref: str) -> bool:
@@ -394,7 +401,7 @@ def generate_pcb_visual_svg(
 ) -> str:
     """Create one clear, user-friendly top-view PCB layout SVG."""
     sensor_positions = get_sensor_visual_positions(sensor_library, board_template)
-    board_height = calculate_pcb_visual_height(sensor_library, board_template) - 80
+    board_height = calculate_pcb_board_height(sensor_library, board_template)
     board_inner_height = board_height - 36
     footer_y = board_height - 12
     bottom_mount_y = board_height - 70
@@ -521,6 +528,22 @@ def generate_pcb_visual_svg(
           color: #102018;
           font-family: Inter, Segoe UI, Arial, sans-serif;
         }}
+        .pcb-upgrade-note {{
+          margin: 0 0 8px 0;
+          color: #234D3C;
+          font-size: 13px;
+          font-weight: 700;
+        }}
+        .pcb-workbench {{
+          display: grid;
+          grid-template-columns: minmax(560px, 2fr) minmax(320px, 1fr);
+          gap: 14px;
+          align-items: start;
+          min-width: 900px;
+        }}
+        .pcb-board-canvas {{
+          min-width: 560px;
+        }}
         .click-target, .trace-hotspot {{
           cursor: pointer;
         }}
@@ -534,12 +557,12 @@ def generate_pcb_visual_svg(
           opacity: 0.82;
         }}
         .pcb-inspector {{
-          margin-top: 10px;
+          margin-top: 0;
           border: 1px solid #B7D3C4;
           border-radius: 8px;
           background: #F8FCF9;
           padding: 14px 16px;
-          max-width: 980px;
+          min-height: 420px;
           box-sizing: border-box;
         }}
         .pcb-inspector-title {{
@@ -583,12 +606,19 @@ def generate_pcb_visual_svg(
           line-height: 1.4;
         }}
         @media (max-width: 760px) {{
+          .pcb-workbench {{
+            grid-template-columns: 1fr;
+            min-width: 560px;
+          }}
           .pcb-inspector-grid {{
             grid-template-columns: 1fr;
           }}
         }}
       </style>
-      <svg viewBox="0 0 860 {board_height}" width="100%" height="{board_height + 60}" role="img" aria-label="Clear top-view PCB layout visual">
+      <p class="pcb-upgrade-note">Interactive Version 4 view: click any component, sensor, trace, keepout, test point, or mounting hole to inspect the matching BOM, pin map, and net details.</p>
+      <div class="pcb-workbench">
+      <div class="pcb-board-canvas">
+      <svg viewBox="0 0 860 {board_height}" width="100%" height="{board_height}" role="img" aria-label="Clear top-view PCB layout visual">
         <defs>
           <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
             <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#2A6B4F" stroke-width="0.7" opacity="0.14"/>
@@ -672,7 +702,9 @@ def generate_pcb_visual_svg(
 
         {svg_text(44, footer_y, "Clear PCB layout view: INSTALL means assemble this part. DNP OPTION means optional footprint exists, but leave it empty for this request.", 13, "800", "#E8FFF1")}
       </svg>
+      </div>
       <div id="pcb-detail-panel" class="pcb-inspector" aria-live="polite"></div>
+      </div>
       <script>
         (function() {{
           const detailData = {detail_json};

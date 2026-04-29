@@ -383,6 +383,10 @@ def render_visual_section(package: Dict[str, Any], selected_components: List[str
         "Sensors marked **DNP OPTION** are optional footprints on the shared prototype PCB; "
         "DNP means 'do not populate,' so those parts are left empty during assembly for this user request."
     )
+    st.caption(
+        "Version 4 visual upgrade: click parts, traces, test points, mounting holes, or the antenna keepout "
+        "to inspect related BOM, pin-map, netlist, and placement details."
+    )
     show_all_footprints = st.toggle(
         "Show all footprint options",
         value=True,
