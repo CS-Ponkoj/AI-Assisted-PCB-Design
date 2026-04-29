@@ -31,6 +31,11 @@ from src.design_generator import (
     generate_schematic_summary as generate_schematic_summary_for_context,
 )
 from src.exports import generate_export_package, rows_to_csv
+from src.gemini_assistant import (
+    GEMINI_MODEL_DEFAULT,
+    check_gemini_status,
+    run_gemini_requirement_assistant,
+)
 from src.llm_assistant import (
     OLLAMA_MODEL_DEFAULT,
     check_ollama_status,
@@ -57,6 +62,9 @@ REQUIREMENT_GROUPS: List[List[str]] = build_requirement_groups(SENSOR_LIBRARY)
 REQUIREMENT_CONFIG: Dict[str, Any] = load_json("data/requirement_keywords.json")
 BOARD_TEMPLATE: Dict[str, Any] = load_json("data/board_template.json")
 SENSOR_REFS: Dict[str, str] = build_sensor_reference_map(SENSOR_LIBRARY, BOARD_TEMPLATE)
+MODE_BASE = "Base"
+MODE_OLLAMA = "Ollama LLM"
+MODE_GEMINI = "Gemini API"
 
 
 def ordered_requirements(requirements: List[str]) -> List[str]:
@@ -108,6 +116,18 @@ def generate_ai_requirements(user_input: str) -> Tuple[Dict[str, Any], Dict[str,
 def generate_llm_requirements(user_input: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Run the optional Ollama LLM assistant and return validated requirements."""
     return run_ollama_requirement_assistant(
+        user_input,
+        SENSOR_LIBRARY,
+        SUPPORTED_SENSORS,
+        SENSOR_KEYWORDS,
+        REQUIREMENT_GROUPS,
+        REQUIREMENT_CONFIG,
+    )
+
+
+def generate_gemini_requirements(user_input: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Run the optional Gemini API assistant and return validated requirements."""
+    return run_gemini_requirement_assistant(
         user_input,
         SENSOR_LIBRARY,
         SUPPORTED_SENSORS,
@@ -288,6 +308,10 @@ def render_ai_summary(parsed: Dict[str, Any], metadata: Dict[str, Any]) -> None:
         mode = metadata.get("mode", ai_info.get("mode", "local"))
         if mode == "ollama":
             st.success(f"LLM assistant used Ollama model {metadata.get('model', OLLAMA_MODEL_DEFAULT)}.")
+        elif mode == "gemini":
+            st.success(f"LLM assistant used Gemini model {metadata.get('model', GEMINI_MODEL_DEFAULT)}.")
+        elif mode == "gemini_fallback":
+            st.warning("Gemini API was requested, but the app used Base assistant fallback.")
         elif mode == "local_fallback":
             st.warning("LLM assistant was requested, but the app used Base assistant fallback.")
         elif metadata.get("used_ai"):
@@ -467,8 +491,10 @@ def build_handoff(
     validation_rows: List[Dict[str, str]],
 ) -> Dict[str, Any]:
     """Build and cache the complete generated handoff for the submitted form."""
-    if parser_mode == "LLM assistant":
+    if parser_mode in {MODE_OLLAMA, "LLM assistant"}:
         parsed, ai_metadata = generate_llm_requirements(user_input)
+    elif parser_mode == MODE_GEMINI:
+        parsed, ai_metadata = generate_gemini_requirements(user_input)
     else:
         parsed, ai_metadata = generate_ai_requirements(user_input)
 
@@ -487,22 +513,24 @@ def render_mode_selector() -> str:
     """Render the requirement extraction mode selector with Base selected first."""
     parser_mode = st.radio(
         "Requirement extraction mode",
-        ["Base", "LLM assistant"],
+        [MODE_BASE, MODE_OLLAMA, MODE_GEMINI],
         horizontal=True,
         help=(
-            "Base needs no setup. LLM assistant uses an Ollama-compatible model server "
-            "and falls back to Base if unavailable."
+            "Base needs no setup. Ollama uses a local or remote Ollama-compatible server. "
+            "Gemini uses a configured API key. Both LLM modes fall back to Base if unavailable."
         ),
     )
-    if parser_mode == "Base":
+    if parser_mode == MODE_BASE:
         st.info("Base mode is active by default. It is free, offline, and runs inside the app.")
+    elif parser_mode == MODE_GEMINI:
+        render_gemini_provider_status()
     else:
-        render_llm_provider_status()
+        render_ollama_provider_status()
     return parser_mode
 
 
-def render_llm_provider_status() -> None:
-    """Render the configured LLM provider endpoint and availability."""
+def render_ollama_provider_status() -> None:
+    """Render the configured Ollama provider endpoint and availability."""
     status = check_ollama_status()
     rows = [
         {"Item": "Provider", "Value": status["provider"]},
@@ -531,6 +559,26 @@ def render_llm_provider_status() -> None:
             "Configure deployment with OLLAMA_URL for a remote server. Optional auth can use "
             "OLLAMA_API_KEY or OLLAMA_AUTH_HEADER."
         )
+
+
+def render_gemini_provider_status() -> None:
+    """Render the configured Gemini provider status without exposing secrets."""
+    status = check_gemini_status(st.secrets)
+    rows = [
+        {"Item": "Provider", "Value": status["provider"]},
+        {"Item": "Model", "Value": status["model"]},
+        {"Item": "API key configured", "Value": "Yes" if status["api_key_configured"] else "No"},
+        {"Item": "Max input characters", "Value": str(status["max_input_chars"])},
+        {"Item": "Max output tokens", "Value": str(status["max_output_tokens"])},
+        {"Item": "Fallback", "Value": status["fallback"]},
+    ]
+    with st.expander("Gemini Provider Status", expanded=True):
+        if status["api_key_configured"]:
+            st.success("Gemini API is configured. The app will still validate its output before generating the PCB handoff.")
+        else:
+            st.warning("GEMINI_API_KEY is not configured. Generate will use Base fallback if Gemini mode is selected.")
+        st.table(rows)
+        st.caption("Configure local or deployed Streamlit secrets with GEMINI_API_KEY. The key is never displayed.")
 
 
 def render_requirement_form() -> Tuple[bool, str]:

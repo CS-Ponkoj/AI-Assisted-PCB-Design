@@ -6,6 +6,11 @@ from unittest.mock import patch
 
 import app
 from src.ai_assistant import validate_ai_extraction
+from src.gemini_assistant import (
+    check_gemini_status,
+    get_gemini_api_key,
+    run_gemini_requirement_assistant,
+)
 from src.llm_assistant import (
     build_ollama_headers,
     check_ollama_status,
@@ -268,6 +273,114 @@ class PcbGeneratorTests(unittest.TestCase):
         self.assertFalse(status["reachable"])
         self.assertFalse(status["model_available"])
         self.assertTrue(status["error"])
+
+    def test_mode_list_keeps_base_first_and_adds_cloud_options(self):
+        self.assertEqual([app.MODE_BASE, app.MODE_OLLAMA, app.MODE_GEMINI], ["Base", "Ollama LLM", "Gemini API"])
+
+    def test_gemini_api_key_prefers_streamlit_secrets_then_environment(self):
+        with patch.dict("os.environ", {"GEMINI_API_KEY": "env-key"}):
+            self.assertEqual(get_gemini_api_key({"GEMINI_API_KEY": "secret-key"}), "secret-key")
+            self.assertEqual(get_gemini_api_key({}), "env-key")
+
+    def test_gemini_api_key_handles_missing_streamlit_secrets_file(self):
+        class MissingSecrets:
+            def get(self, _key, _default=""):
+                raise RuntimeError("No secrets files found")
+
+        with patch.dict("os.environ", {"GEMINI_API_KEY": ""}):
+            self.assertEqual(get_gemini_api_key(MissingSecrets()), "")
+
+    def test_gemini_status_does_not_expose_key(self):
+        status = check_gemini_status({"GEMINI_API_KEY": "secret-key"})
+
+        self.assertTrue(status["api_key_configured"])
+        self.assertEqual(status["provider"], "Gemini API")
+        self.assertNotIn("secret-key", json.dumps(status))
+
+    def test_gemini_falls_back_when_api_key_missing(self):
+        with patch("src.gemini_assistant.get_gemini_api_key", return_value=""):
+            parsed, meta = run_gemini_requirement_assistant(
+                "room comfort brightness",
+                app.SENSOR_LIBRARY,
+                app.SUPPORTED_SENSORS,
+                app.SENSOR_KEYWORDS,
+                app.REQUIREMENT_GROUPS,
+                app.REQUIREMENT_CONFIG,
+            )
+
+        self.assertEqual(meta["mode"], "gemini_fallback")
+        self.assertEqual(meta["provider"], "Gemini API")
+        self.assertEqual(parsed["selected_components"], ["AHT20", "BH1750"])
+        self.assertEqual(parsed["ai_assistant"]["mode"], "gemini_fallback")
+
+    def test_gemini_validates_output_and_ignores_invented_hardware(self):
+        with patch(
+            "src.gemini_assistant.call_gemini_generate",
+            return_value={
+                "requested_sensing": ["temperature", "soil_moisture"],
+                "selected_components": ["AHT20", "SOIL999"],
+                "unsupported_requirements": ["camera"],
+                "confidence": "high",
+                "notes": ["Gemini returned an invented component."],
+            },
+        ):
+            parsed, meta = run_gemini_requirement_assistant(
+                "temperature with camera",
+                app.SENSOR_LIBRARY,
+                app.SUPPORTED_SENSORS,
+                app.SENSOR_KEYWORDS,
+                app.REQUIREMENT_GROUPS,
+                app.REQUIREMENT_CONFIG,
+                api_key="fake-key",
+            )
+
+        self.assertEqual(meta["mode"], "gemini")
+        self.assertEqual(parsed["selected_components"], ["AHT20"])
+        self.assertNotIn("soil_moisture", parsed["requested_sensing"])
+        self.assertIn("camera", parsed["unsupported_requirements"])
+        self.assertTrue(any("Ignored unsupported" in note for note in meta["notes"]))
+
+    def test_gemini_preserves_base_detections_when_model_is_partial(self):
+        with patch(
+            "src.gemini_assistant.call_gemini_generate",
+            return_value={
+                "requested_sensing": ["temperature"],
+                "selected_components": ["AHT20"],
+                "unsupported_requirements": [],
+                "confidence": "high",
+                "notes": ["Gemini returned a partial extraction."],
+            },
+        ):
+            parsed, meta = run_gemini_requirement_assistant(
+                "room comfort brightness and air freshness, no camera",
+                app.SENSOR_LIBRARY,
+                app.SUPPORTED_SENSORS,
+                app.SENSOR_KEYWORDS,
+                app.REQUIREMENT_GROUPS,
+                app.REQUIREMENT_CONFIG,
+                api_key="fake-key",
+            )
+
+        self.assertEqual(meta["mode"], "gemini")
+        self.assertEqual(parsed["selected_components"], ["AHT20", "BH1750", "SGP30"])
+        self.assertIn("camera", parsed["unsupported_requirements"])
+        self.assertTrue(any("Preserved Base assistant" in note for note in meta["notes"]))
+
+    def test_gemini_api_error_falls_back_to_base(self):
+        with patch("src.gemini_assistant.call_gemini_generate", side_effect=RuntimeError("quota exceeded")):
+            parsed, meta = run_gemini_requirement_assistant(
+                "room comfort brightness",
+                app.SENSOR_LIBRARY,
+                app.SUPPORTED_SENSORS,
+                app.SENSOR_KEYWORDS,
+                app.REQUIREMENT_GROUPS,
+                app.REQUIREMENT_CONFIG,
+                api_key="fake-key",
+            )
+
+        self.assertEqual(meta["mode"], "gemini_fallback")
+        self.assertEqual(parsed["selected_components"], ["AHT20", "BH1750"])
+        self.assertIn("quota exceeded", meta["fallback_reason"])
 
     def test_local_assistant_validation_keeps_output_inside_supported_hardware(self):
         rule_based = app.parse_requirements("room comfort brightness and camera")

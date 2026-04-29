@@ -19,8 +19,8 @@ Only the selected I2C sensor footprints change.
 * Folder-based sensor definitions in `data/sensors/<sensor>/sensor.json`.
 * Built-in sensor plugin validation panel in the Streamlit UI.
 * Controlled natural-language extraction using sensor keywords from data files.
-* Two requirement modes: Base assistant and optional LLM assistant.
-* Optional LLM extraction through an Ollama-compatible server with `qwen2.5:3b`, validated output, and Base fallback.
+* Three requirement modes: Base assistant, Ollama LLM, and Gemini API.
+* Optional LLM extraction through either an Ollama-compatible server or Gemini API, with validated output and Base fallback.
 * Design readiness review with Ready, Needs Review, or Blocked status.
 * Detailed output: parsed requirement, I/O table, BOM, pin map, netlist, power budget, schematic notes, layout notes, PCB visual, and build checks.
 * Table-adjacent export buttons for BOM CSV, pin map CSV, and netlist CSV, plus full Markdown and JSON report exports.
@@ -47,13 +47,13 @@ streamlit run app.py
 Base mode works immediately after this step. It runs inside the app with no
 model server, no API key, and no usage cost.
 
-## Convenient Full Setup For LLM Mode
+## Convenient Full Setup For Ollama LLM Mode
 
 `requirements.txt` only installs Python packages. It cannot install Ollama or
 pull an LLM model by itself.
 
 For convenience, this repo includes setup scripts that install the Python
-requirements and pull the default local LLM model. Install Ollama first from:
+requirements and pull the default local Ollama model. Install Ollama first from:
 
 ```text
 https://ollama.com/download
@@ -85,15 +85,16 @@ After setup, run:
 streamlit run app.py
 ```
 
-## Enable LLM Mode Locally
+## Enable Ollama LLM Mode Locally
 
-The app has two requirement modes:
+The app has three requirement modes:
 
 * `Base`: controlled local parsing and validation, always available.
-* `LLM assistant`: uses an Ollama-compatible model server with `qwen2.5:3b`, then validates the model output before generating the PCB handoff.
+* `Ollama LLM`: uses an Ollama-compatible model server with `qwen2.5:3b`, then validates the model output before generating the PCB handoff.
+* `Gemini API`: uses Google's Gemini API, then validates the model output before generating the PCB handoff.
 
-To use both modes locally, install Ollama if it is not already installed on your
-device:
+To use Ollama LLM mode locally, install Ollama if it is not already installed on
+your device:
 
 ```text
 https://ollama.com/download
@@ -135,8 +136,8 @@ OLLAMA_URL=http://localhost:11434
 OLLAMA_MODEL=qwen2.5:3b
 ```
 
-If Ollama is not available, LLM mode falls back to Base mode so the prototype can
-still generate a PCB handoff.
+If Ollama is not available, Ollama LLM mode falls back to Base mode so the
+prototype can still generate a PCB handoff.
 
 Do not commit the Ollama model files into this repository. The `qwen2.5:3b`
 model is about 1.9 GB after download and is served by Ollama as a local model
@@ -151,11 +152,11 @@ Enter a requirement such as:
 Make me a USB-C powered indoor monitoring board with WiFi, Bluetooth, temperature, humidity, and light sensing.
 ```
 
-Choose `Base` or `LLM assistant`, then click `Generate PCB Handoff`. Base is the
-default active mode. When `LLM assistant` is selected, the app shows the
-configured provider endpoint, model, connection status, and whether the model is
-available. The app keeps the last generated result on screen so expanding
-sections or using export buttons does not regenerate the design.
+Choose `Base`, `Ollama LLM`, or `Gemini API`, then click `Generate PCB Handoff`.
+Base is the default active mode. When an LLM mode is selected, the app shows the
+configured provider status and fallback behavior. The app keeps the last
+generated result on screen so expanding sections or using export buttons does
+not regenerate the design.
 
 ## LLM Server Configuration
 
@@ -193,9 +194,48 @@ OLLAMA_AUTH_HEADER=optional-custom-header
 `Header-Name: value` pair.
 
 For Streamlit deployment, Base mode is the safest default because it runs fully
-inside the app. LLM assistant mode needs `OLLAMA_URL` to point to a reachable
+inside the app. Ollama LLM mode needs `OLLAMA_URL` to point to a reachable
 Ollama-compatible server; a deployed Streamlit app cannot use your laptop's
 `localhost` unless the app is also running on that same machine.
+
+## Gemini API Configuration
+
+Gemini API mode does not require Ollama or a local model download. It does
+require a Gemini API key.
+
+For local development, create:
+
+```text
+.streamlit/secrets.toml
+```
+
+Add:
+
+```toml
+GEMINI_API_KEY = "your-key-here"
+```
+
+The `.streamlit/` folder is ignored by Git and must not be committed. You can
+also set `GEMINI_API_KEY` as an environment variable for local testing.
+
+For Streamlit Cloud, add the same secret in the app's secrets settings:
+
+```toml
+GEMINI_API_KEY = "your-key-here"
+```
+
+Optional Gemini environment variables:
+
+```text
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_TIMEOUT_SECONDS=60
+GEMINI_MAX_INPUT_CHARS=1200
+GEMINI_MAX_OUTPUT_TOKENS=350
+```
+
+If the Gemini key is missing, the API returns an error, or the model returns
+invalid JSON, Gemini mode falls back to Base mode. The API key is never displayed
+in the app UI.
 
 ## Project Structure
 
@@ -214,6 +254,7 @@ AI_PCB_Design/
     data_loader.py
     design_generator.py
     exports.py
+    gemini_assistant.py
     llm_assistant.py
     parser.py
     readiness.py
@@ -246,6 +287,7 @@ AI_PCB_Design/
 * `src/parser.py` contains controlled requirement extraction from user input.
 * `src/ai_assistant.py` contains the Base local requirement assistant and output validation.
 * `src/llm_assistant.py` contains the optional Ollama / `qwen2.5:3b` requirement assistant.
+* `src/gemini_assistant.py` contains the optional Gemini API requirement assistant.
 * `src/design_generator.py` contains BOM, pin map, netlist, power budget, checklist, and report data generation.
 * `src/readiness.py` contains the Ready / Needs Review / Blocked design review logic.
 * `src/visuals.py` contains the PCB SVG, architecture diagram, and schematic diagram generation.
