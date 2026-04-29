@@ -172,8 +172,26 @@ class PcbGeneratorTests(unittest.TestCase):
         self.assertGreaterEqual(app.calculate_pcb_visual_height(), 640)
         svg = app.generate_pcb_visual_svg(["AHT20"], {"AHT20": "U3"})
         self.assertIn("Clear top-view PCB layout visual", svg)
+        self.assertIn("pcb-detail-panel", svg)
+        self.assertIn('data-detail="AHT20"', svg)
+        self.assertIn('data-detail="TRACE_3V3"', svg)
+        self.assertIn("Target board: 45 mm x 35 mm", svg)
         self.assertIn("INSTALL", svg)
         self.assertIn("DNP OPTION", svg)
+
+    def test_pcb_visual_can_hide_unpopulated_footprint_options(self):
+        package = app.generate_design_package("temperature humidity light")
+        svg = app.generate_pcb_visual_svg(
+            package["parsed"]["selected_components"],
+            package["sensor_refs"],
+            show_all_footprints=False,
+            package=package,
+        )
+
+        self.assertIn('data-detail="AHT20"', svg)
+        self.assertIn('data-detail="BH1750"', svg)
+        self.assertNotIn('data-detail="SGP30"', svg)
+        self.assertNotIn('data-detail="BMP280"', svg)
 
     def test_export_package_contains_designer_handoff_files(self):
         package = app.generate_design_package("temperature humidity light")

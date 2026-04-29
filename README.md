@@ -6,6 +6,8 @@ Showcase prototype for a controlled PCB design workflow. A user
 describes a small sensor board in natural language, and the app converts that
 request into a structured PCB design handoff.
 
+Current upgrade note: see `VERSION_4.md` for the interactive PCB visual upgrade details.
+
 The architecture is intentionally fixed:
 
 ```text
@@ -23,6 +25,7 @@ Only the selected I2C sensor footprints change.
 * Optional LLM extraction through either an Ollama-compatible server or Gemini API, with validated output and Base fallback.
 * Design readiness review with Ready, Needs Review, or Blocked status.
 * Detailed output: parsed requirement, I/O table, BOM, pin map, netlist, power budget, schematic notes, layout notes, PCB visual, and build checks.
+* Interactive PCB visual with component/trace inspection, populated-only view, board dimensions, connector side, antenna keepout, and mounting-hole coordinates.
 * Table-adjacent export buttons for BOM CSV, pin map CSV, and netlist CSV, plus full Markdown and JSON report exports.
 * Unsupported requests are reported instead of being turned into imaginary hardware.
 
@@ -297,7 +300,7 @@ These folders are intentionally ignored by Git:
 * `src/gemini_assistant.py` contains the optional Gemini API requirement assistant.
 * `src/design_generator.py` contains BOM, pin map, netlist, power budget, checklist, and report data generation.
 * `src/readiness.py` contains the Ready / Needs Review / Blocked design review logic.
-* `src/visuals.py` contains the PCB SVG, architecture diagram, and schematic diagram generation.
+* `src/visuals.py` contains the interactive PCB SVG, architecture diagram, and schematic diagram generation.
 * `src/exports.py` contains CSV, Markdown, and JSON handoff export generation.
 
 ## Adding A Sensor

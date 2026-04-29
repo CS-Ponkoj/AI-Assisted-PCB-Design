@@ -210,13 +210,25 @@ def calculate_pcb_visual_height() -> int:
     return calculate_pcb_visual_height_for_context(SENSOR_LIBRARY, BOARD_TEMPLATE)
 
 
-def generate_pcb_visual_svg(selected_components: List[str], sensor_refs: Dict[str, str]) -> str:
+def generate_pcb_visual_svg(
+    selected_components: List[str],
+    sensor_refs: Dict[str, str],
+    show_all_footprints: bool = True,
+    package: Optional[Dict[str, Any]] = None,
+) -> str:
+    bom_rows = package["bom"] if package else generate_bom(selected_components, sensor_refs)
+    pin_map_rows = package["pin_map"] if package else generate_pin_map(selected_components, sensor_refs)
+    netlist_rows = package["netlist"] if package else generate_netlist_table(selected_components, sensor_refs)
     return generate_pcb_visual_svg_for_context(
         selected_components,
         sensor_refs,
         SENSOR_LIBRARY,
         BOARD_TEMPLATE,
         SENSOR_REFS,
+        bom_rows=bom_rows,
+        pin_map_rows=pin_map_rows,
+        netlist_rows=netlist_rows,
+        show_all_footprints=show_all_footprints,
     )
 
 
@@ -371,10 +383,20 @@ def render_visual_section(package: Dict[str, Any], selected_components: List[str
         "Sensors marked **DNP OPTION** are optional footprints on the shared prototype PCB; "
         "DNP means 'do not populate,' so those parts are left empty during assembly for this user request."
     )
+    show_all_footprints = st.toggle(
+        "Show all footprint options",
+        value=True,
+        help="Turn off to show only populated parts for the current request.",
+    )
     visual_col, legend_col = st.columns([3, 1])
     with visual_col:
         render_html_iframe(
-            generate_pcb_visual_svg(selected_components, package["sensor_refs"]),
+            generate_pcb_visual_svg(
+                selected_components,
+                package["sensor_refs"],
+                show_all_footprints=show_all_footprints,
+                package=package,
+            ),
             height=calculate_pcb_visual_height(),
         )
     with legend_col:
