@@ -47,6 +47,7 @@ from src.readiness import generate_design_readiness_review as generate_design_re
 from src.readiness import status_message_level
 from src.validation import analyze_sensor_definition, validate_sensor_definition
 from src.visuals import (
+    build_visual_detail_data as build_visual_detail_data_for_context,
     calculate_pcb_visual_height as calculate_pcb_visual_height_for_context,
     generate_block_diagram as generate_block_diagram_for_context,
     generate_pcb_visual_svg as generate_pcb_visual_svg_for_context,
@@ -214,6 +215,7 @@ def generate_pcb_visual_svg(
     selected_components: List[str],
     sensor_refs: Dict[str, str],
     show_all_footprints: bool = True,
+    highlighted_net: str = "",
     package: Optional[Dict[str, Any]] = None,
 ) -> str:
     bom_rows = package["bom"] if package else generate_bom(selected_components, sensor_refs)
@@ -229,6 +231,21 @@ def generate_pcb_visual_svg(
         pin_map_rows=pin_map_rows,
         netlist_rows=netlist_rows,
         show_all_footprints=show_all_footprints,
+        highlighted_net=highlighted_net,
+    )
+
+
+def build_visual_detail_data(package: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Build readable inspection data for the selected PCB handoff."""
+    parsed = package["parsed"]
+    return build_visual_detail_data_for_context(
+        parsed["selected_components"],
+        package["sensor_refs"],
+        SENSOR_LIBRARY,
+        SENSOR_REFS,
+        package["bom"],
+        package["pin_map"],
+        package["netlist"],
     )
 
 
@@ -296,18 +313,29 @@ def render_html_iframe(html: str, height: int) -> None:
 
 
 def render_pcb_legend() -> None:
-    """Show a readable legend next to the PCB visual."""
-    st.table(
-        [
-            {"Marking": "INSTALL", "Meaning": "Assemble this sensor for the current user request."},
-            {"Marking": "DNP OPTION", "Meaning": "Optional footprint exists, but leave it empty for this request."},
-            {"Marking": "Orange trace", "Meaning": "USB 5 V input path."},
-            {"Marking": "Amber trace", "Meaning": "Regulated 3.3 V rail."},
-            {"Marking": "Blue trace", "Meaning": "I2C / GPIO signals."},
-            {"Marking": "Dashed gray", "Meaning": "Ground return / ground reference path."},
-            {"Marking": "Yellow box", "Meaning": "ESP32 antenna keepout: no copper or components."},
-        ]
+    """Show a compact color-chip legend next to the PCB visual."""
+    legend_items = [
+        ("#157A4F", "INSTALL", "Assemble for this request."),
+        ("#9CA5A0", "DNP OPTION", "Leave empty for this request."),
+        ("#E67E22", "USB 5 V", "VBUS input path."),
+        ("#C79A19", "3.3 V", "Regulated rail."),
+        ("#2E6FDC", "I2C / GPIO", "Digital signals."),
+        ("#7A8C82", "GND", "Ground return."),
+        ("#FFE26F", "Keepout", "No copper/components."),
+    ]
+    chips = "\n".join(
+        f"""
+        <div style="display:flex; gap:8px; align-items:flex-start; margin:0 0 10px 0;">
+          <span style="width:18px; height:18px; border-radius:4px; background:{color}; border:1px solid #6B7A70; flex:0 0 18px;"></span>
+          <div>
+            <div style="font-weight:700; line-height:1.1;">{label}</div>
+            <div style="font-size:12px; color:#4B5A52; line-height:1.25;">{detail}</div>
+          </div>
+        </div>
+        """
+        for color, label, detail in legend_items
     )
+    st.markdown(chips, unsafe_allow_html=True)
 
 
 def render_ai_summary(parsed: Dict[str, Any], metadata: Dict[str, Any]) -> None:
@@ -383,15 +411,15 @@ def render_visual_section(package: Dict[str, Any], selected_components: List[str
         "Sensors marked **DNP OPTION** are optional footprints on the shared prototype PCB; "
         "DNP means 'do not populate,' so those parts are left empty during assembly for this user request."
     )
-    st.caption(
-        "Version 4 visual upgrade: click parts, traces, test points, mounting holes, or the antenna keepout "
-        "to inspect related BOM, pin-map, netlist, and placement details."
-    )
     show_all_footprints = st.toggle(
         "Show all footprint options",
         value=True,
         help="Turn off to show only populated parts for the current request.",
     )
+    st.caption(
+        "Click any part, sensor, trace, test point, mounting hole, or keepout inside the PCB layout to update the details below the board."
+    )
+
     visual_col, legend_col = st.columns([3, 1])
     with visual_col:
         render_html_iframe(

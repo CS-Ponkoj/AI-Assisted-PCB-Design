@@ -10,7 +10,7 @@ The existing Base, Ollama LLM, and Gemini API requirement modes remain unchanged
 
 ### Interactive PCB Layout Visual
 
-The PCB layout visual now supports click-based inspection for:
+The PCB layout visual now works with Streamlit inspection controls for:
 
 - USB-C connector
 - 3.3 V regulator zone
@@ -25,11 +25,11 @@ The PCB layout visual now supports click-based inspection for:
 - optional DNP sensor footprints
 - key routed nets/traces
 
-Clicking an item updates an inspector panel beside the board visual.
+The board stays large and clean. Users click directly on a component, sensor, trace, keepout, test point, or mounting hole in the PCB layout, and the readable detail panel appears below the board.
 
 ### Inspector Panel
 
-The inspector panel shows design information connected to the clicked board item:
+The inspector panel shows design information connected to the selected board item:
 
 - assembly status
 - placement guidance
@@ -50,7 +50,7 @@ Important traces are now interactive:
 - `I2C_SCL`
 - status/reset routing
 
-Hovering over traces visually highlights them, and clicking opens related net details.
+Clicking a trace opens the related net details in the panel below the board.
 
 ### Footprint View Toggle
 

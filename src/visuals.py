@@ -178,8 +178,8 @@ def calculate_pcb_visual_height(
     sensor_library: Dict[str, Dict[str, Any]],
     board_template: Dict[str, Any],
 ) -> int:
-    """Return iframe height needed for the board plus visible inspector panel."""
-    return calculate_pcb_board_height(sensor_library, board_template) + 90
+    """Return iframe height needed for the board visual and click inspector."""
+    return calculate_pcb_board_height(sensor_library, board_template) + 390
 
 
 def row_matches_ref(row_ref: str, ref: str) -> bool:
@@ -214,7 +214,7 @@ def build_visual_detail_data(
     pin_map_rows: Optional[List[Dict[str, str]]] = None,
     netlist_rows: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, Dict[str, Any]]:
-    """Build click-target data for the interactive PCB inspector."""
+    """Build selectable item data for the PCB inspector."""
     bom_rows = bom_rows or []
     pin_map_rows = pin_map_rows or []
     netlist_rows = netlist_rows or []
@@ -398,6 +398,7 @@ def generate_pcb_visual_svg(
     pin_map_rows: Optional[List[Dict[str, str]]] = None,
     netlist_rows: Optional[List[Dict[str, str]]] = None,
     show_all_footprints: bool = True,
+    highlighted_net: str = "",
 ) -> str:
     """Create one clear, user-friendly top-view PCB layout SVG."""
     sensor_positions = get_sensor_visual_positions(sensor_library, board_template)
@@ -408,6 +409,7 @@ def generate_pcb_visual_svg(
     visible_components = list(sensor_positions) if show_all_footprints else [
         component for component in selected_components if component in sensor_positions
     ]
+    highlighted = highlighted_net.strip()
     detail_data = build_visual_detail_data(
         selected_components,
         selected_sensor_refs,
@@ -420,9 +422,21 @@ def generate_pcb_visual_svg(
     detail_json = json.dumps(detail_data, ensure_ascii=True)
     default_detail = selected_components[0] if selected_components else "BOARD"
 
+    def trace_width(base_width: int, net_group: str) -> int:
+        if not highlighted:
+            return base_width
+        if highlighted == net_group or (highlighted == "I2C" and net_group == "I2C"):
+            return base_width + 4
+        return max(2, base_width - 1)
+
+    def trace_opacity(base_opacity: str, net_group: str) -> str:
+        if not highlighted:
+            return base_opacity
+        return "1" if highlighted == net_group or (highlighted == "I2C" and net_group == "I2C") else "0.32"
+
     mounting_holes = "".join(
         f"""
-        <g class="click-target" data-detail="MOUNTING">
+        <g class="layout-target" data-detail="MOUNTING">
           <title>{label} mounting hole at approx {coord}</title>
           <circle cx="{x}" cy="{y}" r="18" fill="#DDE7E0" stroke="#0E4A35" stroke-width="4"/>
           <circle cx="{x}" cy="{y}" r="9" fill="#0B2B21"/>
@@ -438,7 +452,7 @@ def generate_pcb_visual_svg(
     )
     test_points = "".join(
         f"""
-        <g class="click-target" data-detail="TEST_POINTS">
+        <g class="layout-target" data-detail="TEST_POINTS">
           <title>{label} test point</title>
           <circle cx="{x}" cy="480" r="10" fill="#FFE083" stroke="#8A6A00" stroke-width="2"/>
           {svg_text(x - 15, 506, label, 11, "800", "#193A2C")}
@@ -465,27 +479,31 @@ def generate_pcb_visual_svg(
         status_fill = "#157A4F" if selected else "#9CA5A0"
         status_text = "INSTALL" if selected else "DNP OPTION"
         placement_text = placement if selected else "leave empty for this request"
-        trace_opacity = "1" if selected else "0.22"
+        component_trace_opacity = "1" if selected else "0.22"
+        i2c_opacity = trace_opacity(component_trace_opacity, "I2C")
+        power_opacity = trace_opacity(component_trace_opacity, "3V3")
         sensor_traces.append(
-            f'<g opacity="{trace_opacity}">'
+            f'<g opacity="{i2c_opacity}">'
             + svg_trace(
                 [(525, 230), (585, 230), (585, y + 24), (x, y + 24)],
                 "#2E6FDC",
-                3,
+                trace_width(3, "I2C"),
                 detail_id="TRACE_I2C",
                 title=f"I2C SDA route to {component}",
             )
             + svg_trace(
                 [(525, 250), (596, 250), (596, y + 42), (x, y + 42)],
                 "#2E6FDC",
-                3,
+                trace_width(3, "I2C"),
                 detail_id="TRACE_I2C",
                 title=f"I2C SCL route to {component}",
             )
+            + "</g>"
+            + f'<g opacity="{power_opacity}">'
             + svg_trace(
                 [(338, 214), (580, 214), (580, y + 12), (x, y + 12)],
                 "#C79A19",
-                4,
+                trace_width(4, "3V3"),
                 detail_id="TRACE_3V3",
                 title=f"3V3 rail to {component}",
             )
@@ -493,7 +511,7 @@ def generate_pcb_visual_svg(
         )
         sensor_shapes.append(
             f"""
-            <g class="click-target" data-detail="{html.escape(component)}">
+            <g class="layout-target" data-detail="{html.escape(component)}">
               <title>{html.escape(ref)} {html.escape(component)} - {html.escape(status_text)}</title>
               <rect x="{x}" y="{y}" width="{w}" height="{h}" rx="8" fill="{fill}" stroke="{stroke}" stroke-width="2"/>
               <rect x="{x + 10}" y="{y + 10}" width="34" height="32" rx="4" fill="#F7FBF8" stroke="{stroke}" stroke-width="1.5"/>
@@ -510,7 +528,7 @@ def generate_pcb_visual_svg(
     if not visible_components:
         sensor_shapes.append(
             f"""
-            <g class="click-target" data-detail="BOARD">
+            <g class="layout-target" data-detail="BOARD">
               <title>No populated sensor footprint selected</title>
               <rect x="614" y="82" width="170" height="82" rx="8" fill="#E8F5EA" stroke="#0C6B46" stroke-width="2"/>
               {svg_text(632, 112, "No sensor selected", 15, "800", "#113629")}
@@ -528,27 +546,14 @@ def generate_pcb_visual_svg(
           color: #102018;
           font-family: Inter, Segoe UI, Arial, sans-serif;
         }}
-        .pcb-upgrade-note {{
-          margin: 0 0 8px 0;
-          color: #234D3C;
-          font-size: 13px;
-          font-weight: 700;
-        }}
-        .pcb-workbench {{
-          display: grid;
-          grid-template-columns: minmax(560px, 2fr) minmax(320px, 1fr);
-          gap: 14px;
-          align-items: start;
-          min-width: 900px;
-        }}
         .pcb-board-canvas {{
           min-width: 560px;
         }}
-        .click-target, .trace-hotspot {{
+        .layout-target, .trace-hotspot {{
           cursor: pointer;
         }}
-        .click-target:hover rect,
-        .click-target:hover circle {{
+        .layout-target:hover rect,
+        .layout-target:hover circle {{
           stroke: #FFFFFF;
           stroke-width: 4;
         }}
@@ -556,23 +561,33 @@ def generate_pcb_visual_svg(
           stroke-width: 10;
           opacity: 0.82;
         }}
+        .layout-target.is-selected rect,
+        .layout-target.is-selected circle {{
+          stroke: #FFFFFF;
+          stroke-width: 4;
+        }}
+        .trace-hotspot.is-selected {{
+          stroke-width: 10;
+          opacity: 1;
+        }}
         .pcb-inspector {{
-          margin-top: 0;
+          margin-top: 12px;
           border: 1px solid #B7D3C4;
           border-radius: 8px;
           background: #F8FCF9;
           padding: 14px 16px;
-          min-height: 420px;
           box-sizing: border-box;
+          max-height: 330px;
+          overflow-y: auto;
         }}
         .pcb-inspector-title {{
-          font-size: 17px;
+          font-size: 18px;
           font-weight: 800;
           margin: 0 0 4px 0;
         }}
         .pcb-inspector-status {{
           display: inline-block;
-          padding: 3px 8px;
+          padding: 3px 9px;
           border-radius: 999px;
           background: #DCEFE3;
           color: #0D4A32;
@@ -580,13 +595,18 @@ def generate_pcb_visual_svg(
           font-weight: 800;
           margin-bottom: 8px;
         }}
+        .pcb-inspector-placement {{
+          margin: 0 0 10px 0;
+          font-size: 13px;
+          line-height: 1.4;
+        }}
         .pcb-inspector-grid {{
           display: grid;
           grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 12px;
+          gap: 14px;
         }}
         .pcb-inspector h4 {{
-          margin: 6px 0 4px 0;
+          margin: 6px 0 5px 0;
           font-size: 12px;
           text-transform: uppercase;
           color: #315A48;
@@ -596,27 +616,16 @@ def generate_pcb_visual_svg(
           padding-left: 18px;
         }}
         .pcb-inspector li {{
-          margin: 3px 0;
+          margin: 4px 0;
           font-size: 12px;
           line-height: 1.35;
         }}
-        .pcb-inspector-placement {{
-          margin: 0 0 8px 0;
-          font-size: 13px;
-          line-height: 1.4;
-        }}
         @media (max-width: 760px) {{
-          .pcb-workbench {{
-            grid-template-columns: 1fr;
-            min-width: 560px;
-          }}
           .pcb-inspector-grid {{
             grid-template-columns: 1fr;
           }}
         }}
       </style>
-      <p class="pcb-upgrade-note">Interactive Version 4 view: click any component, sensor, trace, keepout, test point, or mounting hole to inspect the matching BOM, pin map, and net details.</p>
-      <div class="pcb-workbench">
       <div class="pcb-board-canvas">
       <svg viewBox="0 0 860 {board_height}" width="100%" height="{board_height}" role="img" aria-label="Clear top-view PCB layout visual">
         <defs>
@@ -628,20 +637,20 @@ def generate_pcb_visual_svg(
           </filter>
         </defs>
 
-        <g class="click-target" data-detail="BOARD">
+        <g class="layout-target" data-detail="BOARD">
           <title>Board outline: target 45 mm x 35 mm, 2-layer FR-4</title>
           <rect x="12" y="12" width="836" height="{board_height - 24}" rx="30" fill="#166342" filter="url(#shadow)"/>
           <rect x="28" y="28" width="804" height="{board_inner_height}" rx="20" fill="url(#grid)" stroke="#D8F1DE" stroke-width="2" opacity="0.96"/>
           {svg_text(310, 50, "Target board: 45 mm x 35 mm, 2-layer FR-4", 13, "800", "#E8FFF1")}
         </g>
-        <g class="click-target" data-detail="ANTENNA">
+        <g class="layout-target" data-detail="ANTENNA">
           <title>ESP32 antenna keepout: no copper, vias, components, or mounting hardware</title>
           <rect x="492" y="78" width="96" height="92" rx="8" fill="none" stroke="#FFE26F" stroke-width="3" stroke-dasharray="8 6"/>
           {svg_text(498, 68, "ESP32 antenna keepout", 12, "800", "#FFF3A5")}
         </g>
         {mounting_holes}
 
-        <g class="click-target" data-detail="J1">
+        <g class="layout-target" data-detail="J1">
           <title>J1 USB-C power input on left edge</title>
           <rect x="30" y="236" width="78" height="94" rx="6" fill="#D8DEE2" stroke="#56636A" stroke-width="3"/>
           <rect x="10" y="258" width="42" height="50" rx="5" fill="#F4F6F7" stroke="#56636A" stroke-width="2"/>
@@ -649,17 +658,17 @@ def generate_pcb_visual_svg(
           {svg_text(24, 350, "Connector side: left edge", 12, "800", "#E8FFF1")}
         </g>
 
-        <g class="click-target" data-detail="U1">
+        <g class="layout-target" data-detail="U1">
           <title>U1 regulator and C1-C3 power capacitors</title>
           {svg_component(158, 238, 112, 76, "U1 LDO", "5 V to 3.3 V", "#F9C76B")}
           {svg_component(288, 236, 86, 42, "C1-C3", "power caps", "#F5E6A8")}
         </g>
-        <g class="click-target" data-detail="I2C_PULLUPS">
+        <g class="layout-target" data-detail="I2C_PULLUPS">
           <title>R3/R4 I2C pullups to 3.3 V</title>
           {svg_component(288, 142, 92, 50, "R3/R4", "I2C pullups", "#F5E6A8")}
         </g>
 
-        <g class="click-target" data-detail="U2">
+        <g class="layout-target" data-detail="U2">
           <title>U2 ESP32-WROOM-32 module</title>
           <rect x="405" y="176" width="140" height="170" rx="7" fill="#DDE8E4" stroke="#173A31" stroke-width="2"/>
           <rect x="497" y="176" width="48" height="170" fill="#F2D36B" stroke="#173A31" stroke-width="2"/>
@@ -669,42 +678,30 @@ def generate_pcb_visual_svg(
           {svg_text(420, 255, "WiFi / Bluetooth", 11, "600")}
         </g>
 
-        <g class="click-target" data-detail="STATUS_LED">
+        <g class="layout-target" data-detail="STATUS_LED">
           <title>D1/R5 status LED</title>
           {svg_component(110, 390, 95, 54, "D1/R5", "status LED", "#D4E9FF")}
         </g>
-        <g class="click-target" data-detail="RESET">
+        <g class="layout-target" data-detail="RESET">
           <title>SW1/R6 reset interface</title>
           {svg_component(218, 390, 95, 54, "SW1/R6", "reset", "#D4E9FF")}
         </g>
         {test_points}
 
-        {svg_trace([(90, 284), (158, 284)], "#E67E22", 8, detail_id="TRACE_5V", title="VBUS_5V path")}
-        {svg_trace([(270, 276), (338, 276), (338, 214), (405, 214)], "#C79A19", 7, detail_id="TRACE_3V3", title="3V3 rail")}
-        {svg_trace([(475, 282), (475, 480), (100, 480)], "#7A8C82", 4, dashed=True, detail_id="TRACE_GND", title="GND return")}
-        {svg_trace([(270, 258), (288, 258)], "#C79A19", 4, detail_id="TRACE_3V3", title="3V3 decoupling branch")}
-        {svg_trace([(380, 168), (405, 230)], "#2E6FDC", 4, detail_id="TRACE_I2C", title="I2C_SDA route")}
-        {svg_trace([(380, 182), (405, 250)], "#2E6FDC", 4, detail_id="TRACE_I2C", title="I2C_SCL route")}
-        {svg_trace([(475, 346), (475, 390), (260, 390)], "#2E6FDC", 4, detail_id="STATUS_LED", title="GPIO / reset routing")}
+        <g opacity="{trace_opacity("1", "VBUS_5V")}">{svg_trace([(90, 284), (158, 284)], "#E67E22", trace_width(8, "VBUS_5V"), detail_id="TRACE_5V", title="VBUS_5V path")}</g>
+        <g opacity="{trace_opacity("1", "3V3")}">{svg_trace([(270, 276), (338, 276), (338, 214), (405, 214)], "#C79A19", trace_width(7, "3V3"), detail_id="TRACE_3V3", title="3V3 rail")}</g>
+        <g opacity="{trace_opacity("1", "GND")}">{svg_trace([(475, 282), (475, 480), (100, 480)], "#7A8C82", trace_width(4, "GND"), dashed=True, detail_id="TRACE_GND", title="GND return")}</g>
+        <g opacity="{trace_opacity("1", "3V3")}">{svg_trace([(270, 258), (288, 258)], "#C79A19", trace_width(4, "3V3"), detail_id="TRACE_3V3", title="3V3 decoupling branch")}</g>
+        <g opacity="{trace_opacity("1", "I2C")}">{svg_trace([(380, 168), (405, 230)], "#2E6FDC", trace_width(4, "I2C"), detail_id="TRACE_I2C", title="I2C_SDA route")}</g>
+        <g opacity="{trace_opacity("1", "I2C")}">{svg_trace([(380, 182), (405, 250)], "#2E6FDC", trace_width(4, "I2C"), detail_id="TRACE_I2C", title="I2C_SCL route")}</g>
+        <g opacity="{trace_opacity("1", "GPIO")}">{svg_trace([(475, 346), (475, 390), (260, 390)], "#2E6FDC", trace_width(4, "GPIO"), detail_id="STATUS_LED", title="GPIO / reset routing")}</g>
         {"".join(sensor_traces)}
         {"".join(sensor_shapes)}
-
-        <g>
-          <rect x="394" y="390" width="178" height="100" rx="8" fill="#E8F5EA" opacity="0.96" stroke="#2C644A"/>
-          {svg_text(412, 414, "Legend", 13, "800")}
-          <line x1="412" y1="432" x2="452" y2="432" stroke="#E67E22" stroke-width="7"/>
-          {svg_text(462, 437, "USB 5 V", 11, "700")}
-          <line x1="412" y1="454" x2="452" y2="454" stroke="#C79A19" stroke-width="6"/>
-          {svg_text(462, 459, "3.3 V", 11, "700")}
-          <line x1="412" y1="476" x2="452" y2="476" stroke="#2E6FDC" stroke-width="4"/>
-          {svg_text(462, 481, "I2C / GPIO", 11, "700")}
-        </g>
 
         {svg_text(44, footer_y, "Clear PCB layout view: INSTALL means assemble this part. DNP OPTION means optional footprint exists, but leave it empty for this request.", 13, "800", "#E8FFF1")}
       </svg>
       </div>
       <div id="pcb-detail-panel" class="pcb-inspector" aria-live="polite"></div>
-      </div>
       <script>
         (function() {{
           const detailData = {detail_json};

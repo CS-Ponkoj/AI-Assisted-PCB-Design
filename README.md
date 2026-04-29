@@ -25,7 +25,7 @@ Only the selected I2C sensor footprints change.
 * Optional LLM extraction through either an Ollama-compatible server or Gemini API, with validated output and Base fallback.
 * Design readiness review with Ready, Needs Review, or Blocked status.
 * Detailed output: parsed requirement, I/O table, BOM, pin map, netlist, power budget, schematic notes, layout notes, PCB visual, and build checks.
-* Interactive PCB visual with component/trace inspection, populated-only view, board dimensions, connector side, antenna keepout, and mounting-hole coordinates.
+* Interactive PCB visual with click-to-inspect components/traces, populated-only view, board dimensions, connector side, antenna keepout, and mounting-hole coordinates.
 * Table-adjacent export buttons for BOM CSV, pin map CSV, and netlist CSV, plus full Markdown and JSON report exports.
 * Unsupported requests are reported instead of being turned into imaginary hardware.
 

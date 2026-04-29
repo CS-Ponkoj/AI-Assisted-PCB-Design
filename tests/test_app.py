@@ -169,17 +169,28 @@ class PcbGeneratorTests(unittest.TestCase):
             self.assertTrue(any(row["Net"] == "GPIO_INT_OPTIONAL" for row in rows))
 
     def test_pcb_visual_height_is_dynamic(self):
-        self.assertGreaterEqual(app.calculate_pcb_visual_height(), 640)
+        self.assertGreaterEqual(app.calculate_pcb_visual_height(), 900)
         svg = app.generate_pcb_visual_svg(["AHT20"], {"AHT20": "U3"})
         self.assertIn("Clear top-view PCB layout visual", svg)
         self.assertIn('viewBox="0 0 860 560"', svg)
-        self.assertIn("pcb-workbench", svg)
+        self.assertIn("layout-target", svg)
         self.assertIn("pcb-detail-panel", svg)
+        self.assertIn("addEventListener(\"click\"", svg)
+        self.assertNotIn("pcb-workbench", svg)
         self.assertIn('data-detail="AHT20"', svg)
         self.assertIn('data-detail="TRACE_3V3"', svg)
         self.assertIn("Target board: 45 mm x 35 mm", svg)
         self.assertIn("INSTALL", svg)
         self.assertIn("DNP OPTION", svg)
+
+    def test_pcb_visual_detail_data_supports_readable_inspection(self):
+        package = app.generate_design_package("temperature humidity light")
+        detail_data = app.build_visual_detail_data(package)
+
+        self.assertEqual(detail_data["AHT20"]["title"], "U3 AHT20")
+        self.assertEqual(detail_data["TRACE_I2C"]["status"], "3.3 V digital bus")
+        self.assertTrue(any("AHT20" in line for line in detail_data["AHT20"]["bom"]))
+        self.assertTrue(any("I2C_SDA" in line for line in detail_data["TRACE_I2C"]["nets"]))
 
     def test_pcb_visual_can_hide_unpopulated_footprint_options(self):
         package = app.generate_design_package("temperature humidity light")
