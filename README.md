@@ -6,7 +6,7 @@ Showcase prototype for a controlled PCB design workflow. A user
 describes a small sensor board in natural language, and the app converts that
 request into a structured PCB design handoff.
 
-Current upgrade note: see `VERSION_4.md` for the interactive PCB visual upgrade details.
+Current upgrade note: see `VERSION_5.md` for the PCB Review Copilot addition.
 
 The architecture is intentionally fixed:
 
@@ -26,6 +26,7 @@ Only the selected I2C sensor footprints change.
 * Design readiness review with Ready, Needs Review, or Blocked status.
 * Detailed output: parsed requirement, I/O table, BOM, pin map, netlist, power budget, schematic notes, layout notes, PCB visual, and build checks.
 * Interactive PCB visual with click-to-inspect components/traces, populated-only view, board dimensions, connector side, antenna keepout, and mounting-hole coordinates.
+* Gemini-first PCB Review Copilot that answers questions about the generated handoff, with local deterministic review for source-grounded checks when Gemini is unavailable.
 * Table-adjacent export buttons for BOM CSV, pin map CSV, and netlist CSV, plus full Markdown and JSON report exports.
 * Unsupported requests are reported instead of being turned into imaginary hardware.
 
@@ -161,6 +162,12 @@ configured provider status and fallback behavior. The app keeps the last
 generated result on screen so expanding sections or using export buttons does
 not regenerate the design.
 
+After a handoff is generated, use the PCB Review Copilot to ask review questions
+about the generated design. The copilot uses Gemini by default. If Gemini is
+missing, busy, or unavailable, the UI switches to Local Review Mode and shows
+only source-grounded questions that can be answered deterministically from the
+generated handoff.
+
 ## LLM Server Configuration
 
 To use a remote Ollama-compatible server instead of local Ollama:
@@ -235,6 +242,9 @@ GEMINI_MODEL_FALLBACKS=gemini-2.5-flash,gemini-2.0-flash-lite
 GEMINI_TIMEOUT_SECONDS=60
 GEMINI_MAX_INPUT_CHARS=1200
 GEMINI_MAX_OUTPUT_TOKENS=350
+REVIEW_COPILOT_MODEL=gemini-2.5-flash-lite
+REVIEW_COPILOT_MAX_CONTEXT_CHARS=9000
+REVIEW_COPILOT_MAX_OUTPUT_TOKENS=550
 ```
 
 If the Gemini key is missing, the API returns an error, or the model returns
@@ -262,6 +272,7 @@ AI_PCB_Design/
     ollama_assistant.py
     parser.py
     readiness.py
+    review_copilot.py
     validation.py
     visuals.py
   data/
@@ -300,6 +311,7 @@ These folders are intentionally ignored by Git:
 * `src/gemini_assistant.py` contains the optional Gemini API requirement assistant.
 * `src/design_generator.py` contains BOM, pin map, netlist, power budget, checklist, and report data generation.
 * `src/readiness.py` contains the Ready / Needs Review / Blocked design review logic.
+* `src/review_copilot.py` contains the additive PCB Review Copilot context builder, Gemini review path, and local deterministic review helpers.
 * `src/visuals.py` contains the interactive PCB SVG, architecture diagram, and schematic diagram generation.
 * `src/exports.py` contains CSV, Markdown, and JSON handoff export generation.
 

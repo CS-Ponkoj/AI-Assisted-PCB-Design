@@ -45,6 +45,13 @@ from src.parser import ordered_requirements as ordered_requirements_for_context
 from src.parser import parse_requirements as parse_requirements_for_context
 from src.readiness import generate_design_readiness_review as generate_design_readiness_review_for_context
 from src.readiness import status_message_level
+from src.review_copilot import (
+    build_review_context as build_review_context_for_context,
+    deterministic_review_answer as deterministic_review_answer_for_context,
+    format_sources as format_review_sources_for_context,
+    review_context_signature as review_context_signature_for_context,
+    run_gemini_review_copilot as run_gemini_review_copilot_for_context,
+)
 from src.validation import analyze_sensor_definition, validate_sensor_definition
 from src.visuals import (
     build_visual_detail_data as build_visual_detail_data_for_context,
@@ -249,6 +256,120 @@ def build_visual_detail_data(package: Dict[str, Any]) -> Dict[str, Dict[str, Any
     )
 
 
+def build_review_context(package: Dict[str, Any]) -> Dict[str, Any]:
+    """Build the grounded context used by PCB Review Copilot."""
+    return build_review_context_for_context(package)
+
+
+def deterministic_review_answer(question: str, package: Dict[str, Any]) -> Dict[str, Any]:
+    """Answer a copilot question without using an external model."""
+    return deterministic_review_answer_for_context(question, build_review_context(package))
+
+
+def run_review_copilot(
+    question: str,
+    package: Dict[str, Any],
+    use_local_review: bool = False,
+) -> Dict[str, Any]:
+    """Run the PCB Review Copilot for an existing handoff."""
+    if use_local_review:
+        return deterministic_review_answer(question, package)
+    answer = run_gemini_review_copilot_for_context(question, build_review_context(package))
+    if answer.get("mode") != "gemini_unavailable":
+        return answer
+
+    local_answer = deterministic_review_answer(question, package)
+    local_answer["mode"] = "local_review"
+    local_answer["guardrail_notes"] = answer.get("guardrail_notes", [])
+    return local_answer
+
+
+def review_copilot_question_bank(context: Dict[str, Any]) -> List[str]:
+    """Return suggested review questions tailored to the generated handoff."""
+    questions = [
+        "Top risks",
+        "Safe to fabricate?",
+        "Power budget",
+        "Bring-up plan",
+        "Why these sensors?",
+        "I2C and key nets",
+        "What does DNP mean?",
+        "Beginner summary",
+        "PCB reviewer summary",
+    ]
+    selected_components = context.get("requirement", {}).get("selected_components", [])
+    if selected_components:
+        questions.append(f"Remove {selected_components[-1]}?")
+    return questions
+
+
+def local_review_question_bank(context: Dict[str, Any]) -> List[str]:
+    """Return only deterministic local-safe review questions."""
+    return review_copilot_question_bank(context)
+
+
+def review_copilot_question_text(label: str) -> str:
+    """Map compact UI labels to the full review question sent to the copilot."""
+    if label == "Top risks":
+        return "What are the top design risks?"
+    if label == "Safe to fabricate?":
+        return "Is this safe to fabricate?"
+    if label == "Power budget":
+        return "Explain the power budget and regulator margin."
+    if label == "Bring-up plan":
+        return "Create a bring-up plan."
+    if label == "Why these sensors?":
+        return "Why were these sensors selected?"
+    if label == "I2C and key nets":
+        return "Explain the I2C bus and key nets."
+    if label == "What does DNP mean?":
+        return "What does DNP mean here?"
+    if label == "Beginner summary":
+        return "Summarize this for a beginner."
+    if label == "PCB reviewer summary":
+        return "Summarize this for a PCB reviewer."
+    if label.startswith("Remove ") and label.endswith("?"):
+        component = label[len("Remove ") : -1]
+        return f"What happens if I remove {component}?"
+    return label
+
+
+def render_review_copilot_chatbox(messages: List[Dict[str, Any]], use_local_review: bool = False) -> None:
+    """Render copilot messages in a native scrollable Streamlit transcript."""
+    with st.container(
+        height=360,
+        border=True,
+        key="review_copilot_chatbox",
+        autoscroll=True,
+    ):
+        if not messages:
+            if use_local_review:
+                st.info("Gemini is unavailable. Local Review Mode is active for source-grounded checks.")
+            else:
+                st.info("Copilot: Choose a suggested question or ask your own review question to start the review.")
+            return
+
+        for message in messages:
+            role = message.get("role", "assistant")
+            content = str(message.get("content", ""))
+            if role == "user":
+                st.info(f"**You**\n\n{content}")
+                continue
+
+            if message.get("mode") == "gemini_unavailable":
+                st.warning(f"**Copilot**\n\n{content}")
+            else:
+                st.success(f"**Copilot**\n\n{content}")
+            model_text = f" using {message['model']}" if message.get("model") else ""
+            mode_label = message.get("mode", "local")
+            if mode_label == "local":
+                mode_label = "local review"
+            st.caption(
+                f"{format_review_sources_for_context(message.get('sources', []))}. "
+                f"Mode: {mode_label}{model_text}."
+            )
+
+
 def generate_component_list(selected_components: List[str]) -> List[Dict[str, str]]:
     """Compatibility wrapper for the detailed BOM."""
     return generate_bom(selected_components, assign_sensor_refs(selected_components))
@@ -403,6 +524,116 @@ def render_readiness_review(review: Dict[str, Any]) -> None:
                 st.markdown(f"- {item}")
 
 
+def render_review_copilot(package: Dict[str, Any]) -> None:
+    """Render an additive review copilot that cannot mutate the generated handoff."""
+    st.header("PCB Review Copilot")
+    context = build_review_context(package)
+    context_id = review_context_signature_for_context(context)
+    if (
+        st.session_state.get("review_copilot_context_id") != context_id
+        or "review_copilot_messages" not in st.session_state
+    ):
+        st.session_state["review_copilot_context_id"] = context_id
+        st.session_state["review_copilot_messages"] = []
+        st.session_state["review_copilot_force_local"] = False
+
+    gemini_status = check_gemini_status(st.secrets)
+    use_local_review = (
+        not gemini_status["api_key_configured"]
+        or bool(st.session_state.get("review_copilot_force_local"))
+    )
+    quick_question = ""
+    ask_label = "Ask local review question" if use_local_review else "Ask Gemini Review Copilot"
+    with st.form("review_copilot_form", clear_on_submit=True):
+        user_question = st.text_input(
+            ask_label,
+            placeholder="Example: What should I check before fabrication?",
+        )
+        ask_col, clear_col = st.columns([1, 1])
+        with ask_col:
+            submitted = st.form_submit_button("Ask Copilot", type="primary", use_container_width=True)
+        with clear_col:
+            clear_submitted = st.form_submit_button("Clear Chat", use_container_width=True)
+
+    if clear_submitted:
+        st.session_state["review_copilot_messages"] = []
+        quick_question = ""
+        submitted = False
+        user_question = ""
+
+    active_question = quick_question or (user_question.strip() if submitted else "")
+    if submitted and not active_question:
+        st.warning("Enter a review question before asking the copilot.")
+    elif active_question:
+        st.session_state["review_copilot_messages"].append(
+            {"role": "user", "content": active_question}
+        )
+        spinner_text = "Running Local Review Mode..." if use_local_review else "Asking Gemini Review Copilot..."
+        with st.spinner(spinner_text):
+            answer = run_review_copilot(active_question, package, use_local_review=use_local_review)
+        if answer.get("mode") == "local_review" and not use_local_review:
+            st.session_state["review_copilot_force_local"] = True
+        st.session_state["review_copilot_messages"].append(
+            {
+                "role": "assistant",
+                "content": answer["answer"],
+                "sources": answer["sources"],
+                "mode": answer["mode"],
+                "model": answer.get("model", ""),
+                "guardrail_notes": answer.get("guardrail_notes", []),
+            }
+        )
+
+    use_local_review = (
+        not gemini_status["api_key_configured"]
+        or bool(st.session_state.get("review_copilot_force_local"))
+    )
+    chat_col, suggestions_col = st.columns([3, 2])
+    with chat_col:
+        render_review_copilot_chatbox(
+            st.session_state.get("review_copilot_messages", []),
+            use_local_review=use_local_review,
+        )
+    with suggestions_col:
+        question_mode = "Local-safe suggested questions" if use_local_review else "Suggested questions"
+        st.markdown(f"#### {question_mode}")
+        if use_local_review:
+            st.caption("Gemini is unavailable, so these prompts use deterministic handoff review.")
+        else:
+            st.caption(f"Gemini active: {gemini_status['model']}")
+        suggested_questions = local_review_question_bank(context) if use_local_review else review_copilot_question_bank(context)
+        with st.container(height=360, border=True, key=f"review_copilot_suggestions_{context_id}"):
+            for index, question_label in enumerate(suggested_questions):
+                if st.button(
+                    question_label,
+                    key=f"review_copilot_question_{index}_{context_id}",
+                    use_container_width=True,
+                    help=review_copilot_question_text(question_label),
+                ):
+                    quick_question = review_copilot_question_text(question_label)
+
+    if quick_question:
+        st.session_state["review_copilot_messages"].append(
+            {"role": "user", "content": quick_question}
+        )
+        spinner_text = "Running Local Review Mode..." if use_local_review else "Asking Gemini Review Copilot..."
+        with st.spinner(spinner_text):
+            answer = run_review_copilot(quick_question, package, use_local_review=use_local_review)
+        if answer.get("mode") == "local_review" and not use_local_review:
+            st.session_state["review_copilot_force_local"] = True
+        st.session_state["review_copilot_messages"].append(
+            {
+                "role": "assistant",
+                "content": answer["answer"],
+                "sources": answer["sources"],
+                "mode": answer["mode"],
+                "model": answer.get("model", ""),
+                "guardrail_notes": answer.get("guardrail_notes", []),
+            }
+        )
+        st.rerun()
+
+
 def render_visual_section(package: Dict[str, Any], selected_components: List[str]) -> None:
     """Render the primary PCB visual before the detailed handoff tables."""
     st.header("PCB Layout Visual")
@@ -435,6 +666,9 @@ def render_visual_section(package: Dict[str, Any], selected_components: List[str
         st.subheader("PCB Legend")
         render_pcb_legend()
 
+
+def render_system_connectivity_section(selected_components: List[str]) -> None:
+    """Render supporting architecture and schematic diagrams after the copilot."""
     with st.expander("System architecture and schematic connectivity", expanded=False):
         st.subheader("System Architecture")
         st.graphviz_chart(generate_block_diagram(selected_components))
@@ -659,6 +893,12 @@ def render_cached_handoff(cached_handoff: Dict[str, Any]) -> None:
     render_ai_summary(package["parsed"], ai_metadata)
     render_readiness_review(package["readiness_review"])
     render_visual_section(package, selected_components)
+    try:
+        render_review_copilot(package)
+    except Exception as exc:
+        st.warning("PCB Review Copilot is unavailable. The generated handoff is still available.")
+        st.caption(f"Copilot detail: {exc}")
+    render_system_connectivity_section(selected_components)
     render_detail_sections(package, variant)
 
     with st.expander("5. Build Checks", expanded=False):
