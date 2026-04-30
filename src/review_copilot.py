@@ -310,19 +310,47 @@ def answer_bringup(context: Dict[str, Any]) -> Dict[str, Any]:
     ]
     if not steps:
         return response("No bring-up checklist rows are available in this handoff.", [SOURCE_BRINGUP], confidence="low")
-    answer = "Use this bring-up order:\n" + "\n".join(bullet_lines(steps, limit=8))
-    return response(answer, [SOURCE_BRINGUP, SOURCE_POWER], confidence="high")
+    readiness = context["readiness"]
+    prefix = ""
+    if readiness["status"] == "Blocked":
+        blockers = "; ".join(readiness.get("blockers", []))
+        prefix = f"Do not proceed to physical bring-up while this handoff is Blocked. Resolve first: {blockers}\n\n"
+    elif readiness["status"] == "Needs Review":
+        review_items = "; ".join(readiness.get("review_items", []))
+        prefix = f"Resolve the Needs Review item(s) before fabrication or formal bring-up: {review_items}\n\n"
+    answer = prefix + "Use this bring-up order after the readiness items are addressed:\n" + "\n".join(bullet_lines(steps, limit=8))
+    return response(answer, [SOURCE_BRINGUP, SOURCE_POWER, SOURCE_READINESS], confidence="high")
 
 
 def answer_nets(question: str, context: Dict[str, Any]) -> Dict[str, Any]:
     normalized = question.lower()
-    net_terms = ["i2c_sda", "i2c_scl", "i2c", "sda", "scl", "3v3", "vbus", "vbus_5v", "gnd", "ground", "reset", "status"]
-    query_terms = [term for term in net_terms if term in normalized]
+    net_aliases = {
+        "i2c_sda": ["i2c_sda", "sda"],
+        "i2c_scl": ["i2c_scl", "scl"],
+        "vbus_5v": ["vbus_5v", "vbus"],
+        "3v3": ["3v3", "3.3"],
+        "gnd": ["gnd", "ground"],
+        "esp32_en": ["esp32_en", "reset"],
+        "status_led": ["status_led", "status"],
+    }
+    query_nets: List[str] = []
+    for net, aliases in net_aliases.items():
+        if any(alias in normalized for alias in aliases):
+            query_nets.append(net.upper())
     if "i2c" in normalized:
-        query_terms.extend(["I2C_SDA", "I2C_SCL"])
-    if not query_terms:
-        query_terms = ["I2C_SDA", "I2C_SCL", "3V3", "GND"]
-    rows = find_rows(context["netlist"], query_terms, limit=5)
+        query_nets.extend(["I2C_SDA", "I2C_SCL"])
+    if not query_nets:
+        query_nets = ["I2C_SDA", "I2C_SCL", "3V3", "GND"]
+
+    rows = []
+    seen_nets = set()
+    for row in context["netlist"]:
+        net_name = row.get("Net", "").upper()
+        if net_name in query_nets and net_name not in seen_nets:
+            rows.append(row)
+            seen_nets.add(net_name)
+        if len(rows) >= 5:
+            break
     if not rows:
         return response("I could not find a matching net row in the generated netlist.", [SOURCE_NETLIST], confidence="low")
     lines = []

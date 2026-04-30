@@ -73,6 +73,7 @@ SENSOR_REFS: Dict[str, str] = build_sensor_reference_map(SENSOR_LIBRARY, BOARD_T
 MODE_BASE = "Base"
 MODE_OLLAMA = "Ollama LLM"
 MODE_GEMINI = "Gemini API"
+REVIEW_COPILOT_PANEL_HEIGHT = 380
 
 
 def ordered_requirements(requirements: List[str]) -> List[str]:
@@ -337,7 +338,7 @@ def review_copilot_question_text(label: str) -> str:
 def render_review_copilot_chatbox(messages: List[Dict[str, Any]], use_local_review: bool = False) -> None:
     """Render copilot messages in a native scrollable Streamlit transcript."""
     with st.container(
-        height=360,
+        height=REVIEW_COPILOT_PANEL_HEIGHT,
         border=True,
         key="review_copilot_chatbox",
         autoscroll=True,
@@ -590,6 +591,8 @@ def render_review_copilot(package: Dict[str, Any]) -> None:
     )
     chat_col, suggestions_col = st.columns([3, 2])
     with chat_col:
+        st.markdown("#### Chat")
+        st.caption("Conversation")
         render_review_copilot_chatbox(
             st.session_state.get("review_copilot_messages", []),
             use_local_review=use_local_review,
@@ -602,7 +605,11 @@ def render_review_copilot(package: Dict[str, Any]) -> None:
         else:
             st.caption(f"Gemini active: {gemini_status['model']}")
         suggested_questions = local_review_question_bank(context) if use_local_review else review_copilot_question_bank(context)
-        with st.container(height=360, border=True, key=f"review_copilot_suggestions_{context_id}"):
+        with st.container(
+            height=REVIEW_COPILOT_PANEL_HEIGHT,
+            border=True,
+            key=f"review_copilot_suggestions_{context_id}",
+        ):
             for index, question_label in enumerate(suggested_questions):
                 if st.button(
                     question_label,

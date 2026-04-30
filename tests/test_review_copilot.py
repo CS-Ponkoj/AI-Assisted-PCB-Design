@@ -125,6 +125,26 @@ class ReviewCopilotTests(unittest.TestCase):
         self.assertIn("total estimated 3.3 V load", answer["answer"])
         self.assertNotIn("largest individual load is 3.3 V regulator requirement", answer["answer"])
 
+    def test_i2c_key_net_answer_stays_on_actual_key_nets(self):
+        package = generated_package("temperature humidity light")
+        context = build_review_context(package)
+
+        answer = deterministic_review_answer("Explain the I2C bus and key nets.", context)
+
+        self.assertIn("I2C_SDA", answer["answer"])
+        self.assertIn("I2C_SCL", answer["answer"])
+        self.assertNotIn("LOCAL_DECOUPLING", answer["answer"])
+
+    def test_bringup_answer_respects_blocked_readiness(self):
+        package = generated_package("temperature with GPS and camera")
+        context = build_review_context(package)
+
+        answer = deterministic_review_answer("Create a bring-up plan.", context)
+
+        self.assertIn("Do not proceed to physical bring-up", answer["answer"])
+        self.assertIn("Unsupported request(s) excluded", answer["answer"])
+        self.assertIn("Readiness Review", answer["sources"])
+
     def test_copilot_ui_renders_compact_suggestions_and_scrollable_chat(self):
         from streamlit.testing.v1 import AppTest
 
@@ -154,6 +174,7 @@ class ReviewCopilotTests(unittest.TestCase):
         self.assertFalse(any("Gemini Review Copilot is unavailable" in item.value for item in at.warning))
         self.assertFalse(any("copilot-chatbox" in item.value for item in at.markdown))
         self.assertFalse(any("<style>" in item.value for item in at.markdown))
+        self.assertEqual(app.REVIEW_COPILOT_PANEL_HEIGHT, 380)
 
     def test_copilot_ui_orders_copilot_before_supporting_diagrams_and_clears_chat(self):
         from streamlit.testing.v1 import AppTest
