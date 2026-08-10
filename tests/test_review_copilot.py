@@ -1,6 +1,7 @@
 import copy
 import json
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import app
@@ -99,6 +100,21 @@ class ReviewCopilotTests(unittest.TestCase):
         self.assertIn("Readiness status", answer["answer"])
         self.assertIn("Readiness Review", answer["sources"])
 
+    def test_gemini_review_failure_does_not_expose_provider_exception(self):
+        package = generated_package("temperature humidity light")
+        context = build_review_context(package)
+        exposed_secret = "secret-key-must-not-leak"
+
+        with patch(
+            "src.review_copilot.call_gemini_review_generate",
+            side_effect=RuntimeError(f"provider rejected {exposed_secret}"),
+        ):
+            answer = run_gemini_review_copilot("Explain the power budget", context, api_key="fake-key")
+
+        self.assertEqual(answer["mode"], "gemini_unavailable")
+        self.assertNotIn(exposed_secret, json.dumps(answer))
+        self.assertIn("provider_unavailable", " ".join(answer["guardrail_notes"]))
+
     def test_format_sources_is_user_readable(self):
         self.assertEqual(format_sources(["BOM", "Netlist"]), "Based on: BOM, Netlist")
 
@@ -152,7 +168,7 @@ class ReviewCopilotTests(unittest.TestCase):
             "src.review_copilot.get_gemini_api_key",
             return_value="",
         ):
-            at = AppTest.from_file("app.py", default_timeout=60)
+            at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=60)
             at.run()
             at.text_area[0].set_value("USB-C board with WiFi Bluetooth temperature humidity light")
             at.button[0].click().run()
@@ -183,7 +199,7 @@ class ReviewCopilotTests(unittest.TestCase):
             "src.review_copilot.get_gemini_api_key",
             return_value="",
         ):
-            at = AppTest.from_file("app.py", default_timeout=60)
+            at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=60)
             at.run()
             at.text_area[0].set_value("USB-C board with WiFi Bluetooth temperature humidity light")
             at.button[0].click().run()
@@ -211,7 +227,7 @@ class ReviewCopilotTests(unittest.TestCase):
             "src.review_copilot.call_gemini_review_generate",
             side_effect=RuntimeError("Gemini busy"),
         ):
-            at = AppTest.from_file("app.py", default_timeout=60)
+            at = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "app.py"), default_timeout=60)
             at.run()
             at.text_area[0].set_value("USB-C board with WiFi Bluetooth temperature humidity light")
             at.button[0].click().run()

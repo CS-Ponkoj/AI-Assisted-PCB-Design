@@ -1,12 +1,17 @@
 """Optional cloud LLM assistant through the Gemini API."""
 
 import json
+import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple
 
 from .base_assistant import run_ai_requirement_assistant, validate_ai_extraction
 from .ollama_assistant import extract_json_object, read_int_env
 from .parser import ordered_requirements
+from .provider_security import safe_provider_failure, safe_provider_failure_message
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 GEMINI_MODEL_DEFAULT = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite").strip() or "gemini-2.5-flash-lite"
@@ -183,7 +188,7 @@ def run_gemini_requirement_assistant(
         return local_parsed, local_metadata
 
     prompt = build_gemini_prompt(user_input, local_parsed, sensor_library, requirement_config)
-    provider_errors: List[str] = []
+    provider_failure_codes: List[str] = []
     try:
         gemini_result: Dict[str, Any] = {}
         used_model = model
@@ -193,9 +198,15 @@ def run_gemini_requirement_assistant(
                 used_model = candidate_model
                 break
             except Exception as exc:
-                provider_errors.append(f"{candidate_model}: {exc}")
+                failure = safe_provider_failure("Gemini API", exc)
+                provider_failure_codes.append(failure["code"])
+                LOGGER.warning(
+                    "Gemini requirement model %s failed (%s)",
+                    candidate_model,
+                    failure["code"],
+                )
         else:
-            raise RuntimeError("; ".join(provider_errors))
+            raise RuntimeError(provider_failure_codes[-1] if provider_failure_codes else "provider_unavailable")
 
         merged_result = dict(gemini_result)
         merge_notes: List[str] = []
@@ -245,14 +256,22 @@ def run_gemini_requirement_assistant(
             "notes": notes,
         }
     except Exception as exc:
+        if provider_failure_codes:
+            failure_code = provider_failure_codes[-1]
+            failure = {
+                "code": failure_code,
+                "message": safe_provider_failure_message("Gemini API", failure_code),
+            }
+        else:
+            failure = safe_provider_failure("Gemini API", exc)
         local_parsed["ai_assistant"]["mode"] = "gemini_fallback"
         local_parsed["ai_assistant"]["notes"].insert(
             0,
-            f"Gemini API was unavailable or returned invalid JSON; used Base assistant. Detail: {exc}",
+            f"{failure['message']} Used Base assistant fallback.",
         )
         local_metadata["mode"] = "gemini_fallback"
         local_metadata["provider"] = "Gemini API"
         local_metadata["model"] = model
         local_metadata["base_url"] = "Google Gemini API"
-        local_metadata["fallback_reason"] = str(exc)
+        local_metadata["fallback_reason"] = failure["code"]
         return local_parsed, local_metadata

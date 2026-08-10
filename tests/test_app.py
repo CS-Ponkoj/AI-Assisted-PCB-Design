@@ -19,6 +19,7 @@ from src.ollama_assistant import (
     read_int_env,
     run_ollama_requirement_assistant,
 )
+from src.provider_security import safe_endpoint_for_display, safe_provider_failure
 
 
 class PcbGeneratorTests(unittest.TestCase):
@@ -406,7 +407,11 @@ class PcbGeneratorTests(unittest.TestCase):
         self.assertTrue(any("Preserved Base assistant" in note for note in meta["notes"]))
 
     def test_gemini_api_error_falls_back_to_base(self):
-        with patch("src.gemini_assistant.call_gemini_generate", side_effect=RuntimeError("quota exceeded")):
+        exposed_secret = "secret-key-must-not-leak"
+        with patch(
+            "src.gemini_assistant.call_gemini_generate",
+            side_effect=RuntimeError(f"quota exceeded for {exposed_secret}"),
+        ):
             parsed, meta = run_gemini_requirement_assistant(
                 "room comfort brightness",
                 app.SENSOR_LIBRARY,
@@ -419,7 +424,20 @@ class PcbGeneratorTests(unittest.TestCase):
 
         self.assertEqual(meta["mode"], "gemini_fallback")
         self.assertEqual(parsed["selected_components"], ["AHT20", "BH1750"])
-        self.assertIn("quota exceeded", meta["fallback_reason"])
+        self.assertEqual(meta["fallback_reason"], "provider_unavailable")
+        self.assertNotIn(exposed_secret, json.dumps({"parsed": parsed, "meta": meta}))
+
+    def test_provider_failures_and_endpoints_are_safe_for_display(self):
+        exposed_secret = "secret-key-must-not-leak"
+        failure = safe_provider_failure("Gemini API", RuntimeError(exposed_secret))
+
+        self.assertEqual(failure["code"], "provider_unavailable")
+        self.assertNotIn(exposed_secret, json.dumps(failure))
+        self.assertEqual(
+            safe_endpoint_for_display("https://user:password@example.com:8443/api?token=secret#fragment"),
+            "https://example.com:8443/api",
+        )
+        self.assertEqual(safe_endpoint_for_display("https://example.com:invalid"), "Configured endpoint")
 
     def test_gemini_uses_fallback_model_before_base_fallback(self):
         def fake_generate(_prompt, api_key, model):

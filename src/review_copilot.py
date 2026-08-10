@@ -2,11 +2,16 @@
 
 import hashlib
 import json
+import logging
 import os
 import re
 from typing import Any, Dict, Iterable, List, Optional
 
 from .gemini_assistant import GEMINI_MODEL_DEFAULT, get_gemini_api_key, get_gemini_model_candidates
+from .provider_security import safe_provider_failure
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 REVIEW_COPILOT_MODEL_DEFAULT = (
@@ -589,16 +594,23 @@ def run_gemini_review_copilot(
         )
 
     prompt = build_gemini_review_prompt(question, context)
-    provider_errors: List[str] = []
+    provider_failure_codes: List[str] = []
     for candidate_model in get_gemini_model_candidates(model):
         try:
             gemini_result = call_gemini_review_generate(prompt, api_key=resolved_api_key, model=candidate_model)
             return validate_gemini_review_response(gemini_result, candidate_model)
         except Exception as exc:
-            provider_errors.append(f"{candidate_model}: {exc}")
+            failure = safe_provider_failure("Gemini Review Copilot", exc)
+            provider_failure_codes.append(failure["code"])
+            LOGGER.warning(
+                "Gemini review model %s failed (%s)",
+                candidate_model,
+                failure["code"],
+            )
 
     return gemini_unavailable_response(
-        "Gemini review was busy, unavailable, or returned invalid JSON. " + "; ".join(provider_errors),
+        "Gemini Review Copilot is unavailable. Failure category: "
+        + (provider_failure_codes[-1] if provider_failure_codes else "provider_unavailable"),
         model=model,
     )
 

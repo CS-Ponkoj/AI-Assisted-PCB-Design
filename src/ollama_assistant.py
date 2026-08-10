@@ -1,6 +1,7 @@
 """Optional local LLM assistant through Ollama."""
 
 import json
+import logging
 import os
 import urllib.error
 import urllib.parse
@@ -9,6 +10,10 @@ from typing import Any, Dict, List, Tuple
 
 from .base_assistant import run_ai_requirement_assistant, validate_ai_extraction
 from .parser import ordered_requirements
+from .provider_security import safe_endpoint_for_display, safe_provider_failure
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 OLLAMA_MODEL_DEFAULT = os.getenv("OLLAMA_MODEL", "qwen2.5:3b").strip() or "qwen2.5:3b"
@@ -66,7 +71,7 @@ def check_ollama_status(
     """Check whether the configured Ollama server is reachable and has the model."""
     status: Dict[str, Any] = {
         "provider": get_ollama_provider_label(base_url),
-        "base_url": base_url,
+        "base_url": safe_endpoint_for_display(base_url),
         "model": model,
         "reachable": False,
         "model_available": False,
@@ -87,7 +92,10 @@ def check_ollama_status(
         status["models"] = models
         status["model_available"] = model in models
     except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, ValueError) as exc:
-        status["error"] = str(exc)
+        failure = safe_provider_failure("Ollama", exc)
+        status["error"] = failure["message"]
+        status["error_code"] = failure["code"]
+        LOGGER.warning("Ollama status check failed (%s)", failure["code"])
     return status
 
 
@@ -245,6 +253,7 @@ def run_ollama_requirement_assistant(
             "notes": notes,
         }
     except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, ValueError) as exc:
+        failure = safe_provider_failure("Ollama", exc)
         parsed, metadata = run_ai_requirement_assistant(
             user_input,
             sensor_library,
@@ -256,10 +265,11 @@ def run_ollama_requirement_assistant(
         parsed["ai_assistant"]["mode"] = "local_fallback"
         parsed["ai_assistant"]["notes"].insert(
             0,
-            f"Ollama LLM was unavailable or returned invalid JSON; used Base assistant. Detail: {exc}",
+            f"{failure['message']} Used Base assistant fallback.",
         )
         metadata["mode"] = "local_fallback"
         metadata["provider"] = get_ollama_provider_label(base_url)
-        metadata["base_url"] = base_url
-        metadata["fallback_reason"] = str(exc)
+        metadata["base_url"] = safe_endpoint_for_display(base_url)
+        metadata["fallback_reason"] = failure["code"]
+        LOGGER.warning("Ollama generation failed (%s)", failure["code"])
         return parsed, metadata

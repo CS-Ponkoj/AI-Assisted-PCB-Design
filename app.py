@@ -1,5 +1,6 @@
 """Streamlit UI for the PCB design generator."""
 
+import logging
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote
 
@@ -52,7 +53,10 @@ from src.review_copilot import (
     review_context_signature as review_context_signature_for_context,
     run_gemini_review_copilot as run_gemini_review_copilot_for_context,
 )
-from src.validation import analyze_sensor_definition, validate_sensor_definition
+from src.validation import (
+    analyze_sensor_definition as analyze_sensor_definition,
+    validate_sensor_definition as validate_sensor_definition,
+)
 from src.visuals import (
     build_visual_detail_data as build_visual_detail_data_for_context,
     calculate_pcb_visual_height as calculate_pcb_visual_height_for_context,
@@ -61,6 +65,9 @@ from src.visuals import (
     generate_schematic_diagram as generate_schematic_diagram_for_context,
     get_sensor_visual_positions as get_sensor_visual_positions_for_context,
 )
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 SENSOR_LIBRARY: Dict[str, Dict[str, Any]] = load_sensor_definitions()
@@ -903,8 +910,8 @@ def render_cached_handoff(cached_handoff: Dict[str, Any]) -> None:
     try:
         render_review_copilot(package)
     except Exception as exc:
+        LOGGER.warning("PCB Review Copilot rendering failed (%s)", type(exc).__name__)
         st.warning("PCB Review Copilot is unavailable. The generated handoff is still available.")
-        st.caption(f"Copilot detail: {exc}")
     render_system_connectivity_section(selected_components)
     render_detail_sections(package, variant)
 
