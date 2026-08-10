@@ -1,6 +1,10 @@
 # AI-Assisted PCB Design Generator
 
-Live Link: https://ai-assisted-pcb-design.streamlit.app/
+Live app: [ai-assisted-pcb-design.streamlit.app](https://ai-assisted-pcb-design.streamlit.app/)
+
+Current release: `5.1.0`. The app's **Deployment details** panel shows the
+running version, short commit, Python version, Streamlit version, and Gemini
+model without exposing credentials.
 
 Showcase prototype for a controlled PCB design workflow. A user
 describes a small sensor board in natural language, and the app converts that
@@ -32,7 +36,7 @@ Only the selected I2C sensor footprints change.
 
 ## Quick Start
 
-From the project root, install Python 3.8 or later, then install the project
+From the project root, use Python 3.11 or 3.12 and install the pinned production
 dependencies:
 
 ```bash
@@ -50,6 +54,12 @@ streamlit run app.py
 
 Base mode works immediately after this step. It runs inside the app with no
 model server, no API key, and no usage cost.
+
+For development and SQA, install the pinned development toolchain instead:
+
+```bash
+pip install -r requirements-dev.txt
+```
 
 ## Convenient Full Setup For Ollama LLM Mode
 
@@ -343,11 +353,36 @@ shown in the generated netlist for designer review.
 
 ## Tests
 
-Run:
+Run the complete local SQA gate:
 
 ```bash
-python -m unittest
+python scripts/run_sqa.py
 ```
+
+Convenience wrappers are also available:
+
+```powershell
+.\scripts\run_sqa.ps1
+```
+
+```bash
+sh scripts/run_sqa.sh
+```
+
+The gate checks dependency consistency, Python compilation, pytest with at
+least 85% source and branch coverage, Ruff, production dependency
+vulnerabilities, tracked-secret patterns, and a real local Streamlit health
+start. GitHub Actions repeats the same gate on Python 3.11 and 3.12.
+
+For a focused test while developing:
+
+```bash
+python -m pytest tests/test_app.py -q
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the incremental change workflow and
+[DEPLOYMENT.md](DEPLOYMENT.md) for Streamlit deployment, secrets, dependency
+upgrades, live verification, and rollback.
 
 ## Notes
 

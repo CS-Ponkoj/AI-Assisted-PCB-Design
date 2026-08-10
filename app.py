@@ -16,6 +16,7 @@ from src.data_loader import (
     load_sensor_definitions,
 )
 from src.base_assistant import LOCAL_ASSISTANT_NAME, run_ai_requirement_assistant
+from src.build_info import get_build_info
 from src.design_generator import (
     assign_sensor_refs as assign_sensor_refs_for_context,
     generate_assumptions as generate_assumptions_for_context,
@@ -81,6 +82,14 @@ MODE_BASE = "Base"
 MODE_OLLAMA = "Ollama LLM"
 MODE_GEMINI = "Gemini API"
 REVIEW_COPILOT_PANEL_HEIGHT = 380
+
+
+def render_build_info() -> None:
+    """Show deployment traceability without exposing credentials or host details."""
+    build_info = get_build_info()
+    st.caption(f"App {build_info['App version']} · build {build_info['Commit']}")
+    with st.expander("Deployment details", expanded=False):
+        st.table([{"Item": key, "Value": value} for key, value in build_info.items()])
 
 
 def ordered_requirements(requirements: List[str]) -> List[str]:
@@ -931,6 +940,7 @@ def main() -> None:
     st.markdown(
         "Generate a build-oriented 2-layer ESP32 sensor-board handoff from a controlled natural-language requirement."
     )
+    render_build_info()
     render_scope_panel()
     validation_rows = render_sensor_validation_panel()
     parser_mode = render_mode_selector()

@@ -8,7 +8,9 @@ import app
 from src.review_copilot import (
     build_review_context,
     deterministic_review_answer,
+    extract_json_object,
     format_sources,
+    read_int_env,
     run_gemini_review_copilot,
     run_review_copilot,
 )
@@ -21,6 +23,18 @@ def generated_package(requirement: str):
 
 
 class ReviewCopilotTests(unittest.TestCase):
+    def test_configuration_and_model_json_helpers_fail_safely(self):
+        with patch.dict("os.environ", {"REVIEW_TEST_INT": "12"}):
+            self.assertEqual(read_int_env("REVIEW_TEST_INT", 7), 12)
+        with patch.dict("os.environ", {"REVIEW_TEST_INT": "invalid"}):
+            self.assertEqual(read_int_env("REVIEW_TEST_INT", 7), 7)
+        with patch.dict("os.environ", {"REVIEW_TEST_INT": "0"}):
+            self.assertEqual(read_int_env("REVIEW_TEST_INT", 7), 7)
+
+        self.assertEqual(extract_json_object('prefix {"answer": "grounded"} suffix'), {"answer": "grounded"})
+        with self.assertRaises(json.JSONDecodeError):
+            extract_json_object("no JSON object here")
+
     def test_review_context_is_built_from_generated_package_without_mutating_it(self):
         package = generated_package("temperature humidity light")
         before = json.dumps(package, sort_keys=True)
@@ -150,6 +164,49 @@ class ReviewCopilotTests(unittest.TestCase):
         self.assertIn("I2C_SDA", answer["answer"])
         self.assertIn("I2C_SCL", answer["answer"])
         self.assertNotIn("LOCAL_DECOUPLING", answer["answer"])
+
+    def test_local_review_routes_cover_fabrication_summaries_and_change_aliases(self):
+        package = generated_package("temperature humidity")
+        context = build_review_context(package)
+
+        cases = [
+            ("", "Ask a question", "Scope Guardrail"),
+            ("Is this safe to fabricate?", "readiness gate", "Fabrication Checklist"),
+            ("Summarize for a PCB reviewer", "Reviewer snapshot", "Layout Guidance"),
+            ("Explain this design for a beginner", "small ESP32 sensor board", "Project Summary"),
+            ("Why were these sensors selected?", "AHT20", "BOM"),
+            ("What does DNP mean?", "do not populate", "Scope Guardrail"),
+            ("What happens if I remove temperature sensing?", "Removing AHT20", "Pin Map"),
+            ("Change the board architecture", "cannot change", "Scope Guardrail"),
+        ]
+        for question, expected_text, expected_source in cases:
+            with self.subTest(question=question):
+                answer = deterministic_review_answer(question, context)
+                self.assertIn(expected_text, answer["answer"])
+                self.assertIn(expected_source, answer["sources"])
+
+    def test_local_review_missing_tables_return_grounded_low_confidence_answers(self):
+        package = generated_package("temperature humidity")
+        context = build_review_context(package)
+
+        cases = [
+            ("power budget", "power_budget", "No power-budget"),
+            ("bring-up plan", "bringup_checklist", "No bring-up"),
+            ("show the I2C nets", "netlist", "could not find a matching net"),
+        ]
+        for question, empty_key, expected_text in cases:
+            with self.subTest(question=question):
+                sparse_context = copy.deepcopy(context)
+                sparse_context[empty_key] = []
+                answer = deterministic_review_answer(question, sparse_context)
+                self.assertIn(expected_text, answer["answer"])
+                self.assertEqual(answer["confidence"], "low")
+
+        no_sensor_context = copy.deepcopy(context)
+        no_sensor_context["requirement"]["selected_components"] = []
+        answer = deterministic_review_answer("Why were sensors selected?", no_sensor_context)
+        self.assertIn("No supported sensor", answer["answer"])
+        self.assertEqual(answer["confidence"], "high")
 
     def test_bringup_answer_respects_blocked_readiness(self):
         package = generated_package("temperature with GPS and camera")

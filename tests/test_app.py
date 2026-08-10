@@ -1,3 +1,4 @@
+import copy
 import json
 import tempfile
 import unittest
@@ -19,7 +20,7 @@ from src.ollama_assistant import (
     read_int_env,
     run_ollama_requirement_assistant,
 )
-from src.provider_security import safe_endpoint_for_display, safe_provider_failure
+from src.provider_security import safe_endpoint_for_display, safe_provider_failure, safe_provider_failure_message
 
 
 class PcbGeneratorTests(unittest.TestCase):
@@ -438,6 +439,16 @@ class PcbGeneratorTests(unittest.TestCase):
             "https://example.com:8443/api",
         )
         self.assertEqual(safe_endpoint_for_display("https://example.com:invalid"), "Configured endpoint")
+        self.assertEqual(safe_provider_failure("Gemini API", TimeoutError())["code"], "timeout")
+        self.assertEqual(
+            safe_provider_failure("Gemini API", json.JSONDecodeError("bad", "x", 0))["code"],
+            "invalid_response",
+        )
+        self.assertEqual(safe_provider_failure("Gemini API", OSError())["code"], "unreachable")
+        self.assertEqual(
+            safe_provider_failure_message("Gemini API", "unknown"),
+            "Gemini API is unavailable.",
+        )
 
     def test_gemini_uses_fallback_model_before_base_fallback(self):
         def fake_generate(_prompt, api_key, model):
@@ -549,6 +560,58 @@ class PcbGeneratorTests(unittest.TestCase):
 
         self.assertEqual(errors, [])
         self.assertTrue(any("interface SPI" in warning for warning in warnings))
+
+    def test_sensor_validation_reports_nested_schema_errors_and_missing_nets(self):
+        sensor = copy.deepcopy(app.SENSOR_LIBRARY["AHT20"])
+        sensor["categories"] = [{"keywords": []}, "invalid-category"]
+        sensor["pins"] = {"VDD": 3}
+        sensor["current_ma"] = "invalid"
+
+        errors, _warnings = app.analyze_sensor_definition(sensor, Path("BAD/sensor.json"))
+
+        self.assertTrue(any("missing name" in error for error in errors))
+        self.assertTrue(any("must be an object" in error for error in errors))
+        self.assertTrue(any("pins must map" in error for error in errors))
+        self.assertTrue(any("current_ma must be numeric" in error for error in errors))
+
+        sensor["categories"] = copy.deepcopy(app.SENSOR_LIBRARY["AHT20"]["categories"])
+        sensor["pins"] = {}
+        sensor["current_ma"] = 1.0
+        errors, _warnings = app.analyze_sensor_definition(sensor, Path("EMPTY_PINS/sensor.json"))
+        self.assertTrue(any("non-empty pins" in error for error in errors))
+
+        sensor["pins"] = {"VDD": "3V3"}
+        errors, warnings = app.analyze_sensor_definition(sensor, Path("MISSING_NETS/sensor.json"))
+        self.assertEqual(errors, [])
+        self.assertGreaterEqual(len(warnings), 3)
+
+    def test_compatibility_wrappers_cover_complete_generated_handoff(self):
+        user_input = "temperature humidity and light sensing"
+        parsed = app.parse_requirements(user_input)
+        selected = parsed["selected_components"]
+        refs = app.assign_sensor_refs(selected)
+        package = app.generate_design_package(user_input, parsed)
+
+        self.assertEqual(app.ordered_requirements(parsed["requested_sensing"]), parsed["requested_sensing"])
+        self.assertEqual(app.generate_ai_requirements(user_input)[0]["selected_components"], selected)
+        self.assertTrue(app.generate_project_summary(user_input, parsed))
+        self.assertTrue(app.generate_assumptions(parsed))
+        self.assertTrue(app.generate_io_table(parsed, selected))
+        self.assertTrue(app.generate_bom(selected, refs))
+        self.assertTrue(app.generate_pin_map(selected, refs))
+        self.assertTrue(app.generate_netlist_table(selected, refs))
+        self.assertTrue(app.generate_power_budget(selected))
+        self.assertTrue(app.generate_layout_guidance(selected, refs))
+        self.assertTrue(app.generate_fabrication_checklist())
+        self.assertTrue(app.generate_bringup_checklist(selected, refs))
+        self.assertTrue(app.generate_schematic_summary(selected, refs))
+        self.assertTrue(app.generate_block_diagram(selected).source)
+        self.assertTrue(app.generate_schematic_diagram(selected).source)
+        self.assertTrue(app.get_sensor_visual_positions())
+        self.assertGreater(app.calculate_pcb_visual_height(), 0)
+        self.assertTrue(app.generate_component_list(selected))
+        self.assertIn("I2C_SDA", app.generate_netlist(selected))
+        self.assertTrue(app.build_visual_detail_data(package))
 
 
 if __name__ == "__main__":
